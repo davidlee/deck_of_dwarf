@@ -28,6 +28,7 @@
           zigPackage
         ];
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (with pkgs; [
+          mesa
           alsa-lib
           libdecor
           libusb1
