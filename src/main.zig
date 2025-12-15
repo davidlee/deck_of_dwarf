@@ -1,191 +1,57 @@
 const sdl3 = @import("sdl3");
+// const sdl_main = @import("sdl3/main.zig");
+
 const std = @import("std");
-const builtin = @import("builtin");
-
-// Use main callbacks.
-comptime {
-    _ = sdl3.main_callbacks;
-}
-
-// https://www.pexels.com/photo/green-trees-on-the-field-1630049/
-const my_image = @embedFile("data/trees.jpeg");
 
 const fps = 60;
-const window_width = 640;
-const window_height = 480;
+const screen_width = 640;
+const screen_height = 480;
 
-// Disable main hack.
-pub const _start = void;
-pub const WinMainCRTStartup = void;
+const tilesize: i32 = 20;
 
-/// Allocator we will use.
-const allocator = if (builtin.os.tag != .emscripten) std.heap.smp_allocator else std.heap.c_allocator;
+const tiles_x = screen_width / tilesize;
+const tiles_y = screen_height / tilesize;
 
-/// For logging system messages.
-const log_app = sdl3.log.Category.application;
+pub fn main() !void {
+    defer sdl3.shutdown();
 
-/// Sample structure to use to hold our app state.
-const AppState = struct {
-    frame_capper: sdl3.extras.FramerateCapper(f32),
-    window: sdl3.video.Window,
-    renderer: sdl3.render.Renderer,
-    tree_tex: sdl3.render.Texture,
-};
+    // Initialize SDL with subsystems you need here.
+    const init_flags = sdl3.InitFlags{ .video = true };
+    try sdl3.init(init_flags);
+    defer sdl3.quit(init_flags);
 
-/// Do our initialization logic here.
-///
-/// ## Function Parameters
-/// * `app_state`: Where to store a pointer representing the state to use for the application.
-/// * `args`: Slice of arguments provided to the application.
-///
-/// ## Return Value
-/// Returns if the app should continue running, or result in success or failure.
-///
-/// ## Remarks
-/// Note that for further callbacks (except for `quit()`), we assume that we did end up setting `app_state`.
-/// If this function does not return `AppResult.run` or errors, then `quit()` will be invoked.
-/// Do not worry about logging errors from SDL yourself and just use `try` and `catch` as you please.
-/// If you set the error callback for every thread, then zig-sdl3 will be automatically logging errors.
-pub fn init(
-    app_state: *?*AppState,
-    args: [][*:0]u8,
-) !sdl3.AppResult {
-    _ = args;
+    // Initial window setup.
+    const window = try sdl3.video.Window.init("Hello SDL3", screen_width, screen_height, .{});
+    defer window.deinit();
 
-    // Setup logging.
-    sdl3.errors.error_callback = &sdl3.extras.sdlErrZigLog;
-    sdl3.log.setAllPriorities(.info);
-    sdl3.log.setLogOutputFunction(void, &sdl3.extras.sdlLogZigLog, null);
+    // Useful for limiting the FPS and getting the delta time.
+    var fps_capper = sdl3.extras.FramerateCapper(f32){ .mode = .{ .limited = fps } };
 
-    try log_app.logInfo("Starting application...", .{});
+    var quit = false;
+    while (!quit) {
 
-    // Prepare app state.
-    const state = try allocator.create(AppState);
-    errdefer allocator.destroy(state);
+        // Delay to limit the FPS, returned delta time not needed.
+        const dt = fps_capper.delay();
+        _ = dt;
 
-    // Setup initial data.
-    const window, const renderer = try sdl3.render.Renderer.initWithWindow(
-        "Hello SDL3",
-        window_width,
-        window_height,
-        .{},
-    );
-    errdefer renderer.deinit();
-    errdefer window.deinit();
-    var frame_capper = sdl3.extras.FramerateCapper(f32){ .mode = .{ .unlimited = {} } };
-    renderer.setVSync(.{ .on_each_num_refresh = 1 }) catch {
+        // Update logic.
+        const surface = try window.getSurface();
+        for(0..tiles_x) |x| {
+            for(0..tiles_y) |y| {
+                const xi:i32 = @intCast(x);
+                const yi:i32 = @intCast(y);
+                const rect = sdl3.rect.IRect {.x = xi * tilesize, .y = yi * tilesize, .w = tilesize - 2, .h = tilesize - 2};
+                try surface.fillRect(rect, surface.mapRgb(128, 30, 255));
+            }
+        }
+        try window.updateSurface();
 
-        // We don't want to run at unlimited FPS, cap frame rate to the default FPS if vsync is not available so we don't burn CPU time.
-        frame_capper.mode = .{ .limited = fps };
-    };
-    const tree_tex = try sdl3.image.loadTextureIo(
-        renderer,
-        try sdl3.io_stream.Stream.initFromConstMem(my_image),
-        true,
-    );
-    errdefer tree_tex.deinit();
-
-    // Prove error handling works.
-    const dummy: ?sdl3.video.Window = sdl3.video.Window.fromId(99999) catch null;
-    _ = dummy;
-
-    // Set app state.
-    state.* = .{
-        .frame_capper = frame_capper,
-        .window = window,
-        .renderer = renderer,
-        .tree_tex = tree_tex,
-    };
-    app_state.* = state;
-
-    try log_app.logInfo("Finished initializing", .{});
-    return .run;
-}
-
-/// Do our render and update logic here.
-///
-/// ## Function Parameters
-/// * `app_state`: Application state set from `init()`.
-///
-/// ## Return Value
-/// Returns if the app should continue running, or result in success or failure.
-///
-/// ## Remarks
-/// If this function does not return `AppResult.run` or errors, then `quit()` will be invoked.
-/// We assume that `app_state` was set by `init()`.
-/// If this function takes too long, your application will lag.
-pub fn iterate(
-    app_state: *AppState,
-) !sdl3.AppResult {
-    const dt = app_state.frame_capper.delay();
-    _ = dt; // We don't need dt for this example, but might be useful to you.
-
-    // Draw main scene.
-    try app_state.renderer.setDrawColor(.{ .r = 128, .g = 30, .b = 255, .a = 255 });
-    try app_state.renderer.clear();
-    const border = 10;
-    try app_state.renderer.renderTexture(app_state.tree_tex, null, .{
-        .x = border,
-        .y = border,
-        .w = window_width - border * 2,
-        .h = window_height - border * 2,
-    });
-    try app_state.renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 255 });
-
-    // Draw debug FPS.
-    var fps_text_buf: [32]u8 = undefined;
-    const fps_text = std.fmt.bufPrintZ(&fps_text_buf, "FPS: {d}", .{app_state.frame_capper.getObservedFps()}) catch "[Err]";
-    try app_state.renderer.renderDebugText(.{ .x = 0, .y = 0 }, fps_text);
-
-    // Finish and return.
-    try app_state.renderer.present();
-    return .run;
-}
-
-/// Handle events here.
-///
-/// ## Function Parameter
-/// * `app_state`: Application state set from `init()`.
-/// * `event`: Event that the application has just received.
-///
-/// ## Return Value
-/// Returns if the app should continue running, or result in success or failure.
-///
-/// ## Remarks
-/// If this function does not return `AppResult.run` or errors, then `quit()` will be invoked.
-/// We assume that `app_state` was set by `init()`.
-/// If this function takes too long, your application will lag.
-pub fn event(
-    app_state: *AppState,
-    curr_event: sdl3.events.Event,
-) !sdl3.AppResult {
-    _ = app_state;
-    switch (curr_event) {
-        .terminating => return .success,
-        .quit => return .success,
-        else => {},
-    }
-    return .run;
-}
-
-/// Quit logic here.
-///
-/// ## Function Parameters
-/// * `app_state`: Application state if it was set by `init()`, or `null` if `init()` did not set it (because of say an error).
-/// * `result`: Result indicating the success of the application. Should never be `AppResult.run`.
-///
-/// ## Remarks
-/// Make sure you clean up any resources here.
-/// Or don't the OS would take care of it anyway but any leak detection you use will yell at you :>
-pub fn quit(
-    app_state: ?*AppState,
-    result: sdl3.AppResult,
-) void {
-    _ = result;
-    if (app_state) |val| {
-        val.tree_tex.deinit();
-        val.renderer.deinit();
-        val.window.deinit();
-        allocator.destroy(val);
+        // Event logic.
+        while (sdl3.events.poll()) |event|
+            switch (event) {
+                .quit => quit = true,
+                .terminating => quit = true,
+                else => {},
+            };
     }
 }
