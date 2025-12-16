@@ -2,6 +2,7 @@ const std = @import("std");
 const Cast = @import("util").Cast;
 const gfx = @import("graphics");
 const ctl = @import("controls");
+const gen = @import("map_gen");
 const World = @import("model").World;
 
 const log = std.debug.print;
@@ -38,7 +39,7 @@ pub fn main() !void {
     var renderer = try s.render.Renderer.init(window, null);
     defer renderer.deinit();
 
-    try renderer.setLogicalPresentation(world.config.screen_width, world.config.screen_height, s.render.LogicalPresentation.letter_box);
+    // try renderer.setLogicalPresentation(world.config.screen_width, world.config.screen_height, s.render.LogicalPresentation.letter_box);
 
     // Useful for limiting the FPS and getting the delta time.
     var fps_capper = s.extras.FramerateCapper(f32){ .mode = .{ .limited = world.config.fps } };
@@ -50,10 +51,12 @@ pub fn main() !void {
     var camera = s.rect.IRect{
         .x = 0,
         .y = 0,
-        .w = Cast.itoi32(world.ui.width),
-        .h = Cast.itoi32(world.ui.height),
+        .w = Cast.itoi32(world.ui.screen.w),
+        .h = Cast.itoi32(world.ui.screen.h),
     };
     camera.x = 0;
+
+    try gen.generateTerrain(alloc, &world);
 
     var quit = false;
     while (!quit) {
@@ -70,8 +73,6 @@ pub fn main() !void {
                 .terminating => quit = true,
                 .key_down => {
                     quit = ctl.keypress(event.key_down.key.?, &world);
-                    // const playerLogicalPos = sprite_sheet.xyOf(world.player.x, world.player.y);
-                    // log("\n Logical Pos: {}", .{playerLogicalPos});
                 },
                 .mouse_motion => {
                     // const playerLogicalPos = sprite_sheet.xyOf(world.player.x, world.player.y);
@@ -81,33 +82,18 @@ pub fn main() !void {
                     // log("\n mouse: {} \n world: {} \n player x,y: {},{} \n", .{ event, world, playerLogicalPos.x, playerLogicalPos.y });
                     // const rect = sprite_sheet.toXY(event.mouse_motion.x, event.mouse_motion.y);
                     // log("\n rect: {}",.{rect});
-
                 },
                 .mouse_wheel => {
                     // log("\nscroll: -> {any}",.{event});
                     world.ui.zoom = std.math.clamp(world.ui.zoom + event.mouse_wheel.scroll_y, 1.0, 10.0);
                     world.ui.scale_changed = true;
-
-                    // const playerLogicalPos = sprite_sheet.xyOf(world.player.x, world.player.y);
-                    // var viewport = s.rect.FRect{
-                    //     .h = 0,
-                    //     .w = 0,
-                    //     .x = 0,
-                    //     .y = 0,
-                    // };
-
-                    //renderer.setViewport()
-
-                    //renderer.renderCoordinatesFromWindowCoordinates()
-                    // log("\n mouse: {} \n world: {} \n player x,y: {},{} \n", .{ event, world, playerLogicalPos.x, playerLogicalPos.y });
-                    // log("\nY-SCROLL: {}",.{world.ui.scale});
-                    // }
                 },
                 .window_resized => {
-                    world.ui.width = Cast.itou64(event.window_resized.width);
-                    world.ui.height = Cast.itou64(event.window_resized.height);
+                    // world.ui.width = Cast.itou64(event.window_resized.width);
+                    // world.ui.height = Cast.itou64(event.window_resized.height);
+                    world.ui.screen.w = event.window_resized.width;
+                    world.ui.screen.h = event.window_resized.height;
                     world.ui.scale_changed = true;
-                    // try renderer.setLogicalPresentation(world.ui.width, world.ui.height, s.render.LogicalPresentation.letter_box);
                 },
                 else => {
                     // log("\nevent:{any}->\n",.{event});

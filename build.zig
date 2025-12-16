@@ -24,6 +24,8 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .optimize = optimize,
     });
 
+    const znoise = b.dependency("znoise", .{});
+
     const util = b.createModule(.{
         .root_source_file = b.path("src/util.zig"),
         .target = target,
@@ -45,6 +47,7 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     });
     map_gen.addImport("model", model);
     map_gen.addImport("util", util);
+    map_gen.addImport("znoise", znoise.module("root"));
 
     const graphics = b.createModule(.{
         .root_source_file = b.path("src/graphics.zig"),
@@ -75,11 +78,14 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     exe_mod.addImport("model", model);
     exe_mod.addImport("graphics", graphics);
     exe_mod.addImport("controls", controls);
+    exe_mod.addImport("map_gen", map_gen);
     exe_mod.addImport("polystate", polystate.module("root"));
 
     exe_mod.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm"));
 
     b.installArtifact(exe);
+
+    exe.linkLibrary(znoise.artifact("FastNoiseLite"));
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());

@@ -62,16 +62,8 @@ pub const SpriteSheet = struct {
     }
 };
 
-// pub fn mapExtent(world: *World, sprite_sheet: *SpriteSheet) s.rect.IPoint {
-//     const w = world.max.x * Cast.ftoi32(sprite_sheet.width);
-// }
-//
 pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *SpriteSheet) !void {
     try renderer.clear();
-
-    // renderer.getCurrentOutputSize()
-    //
-    // renderer.setLogicalPresentation()
 
     // FIXME use renderCoordinates when calculating mouse collision
     // rather than the simple fromXY etc in SpriteSheet above
@@ -80,14 +72,14 @@ pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprite
     var i: usize = 0;
     for (0..world.max.y) |y| {
         for (0..world.max.x) |x| {
-            var idx: usize = 0;
+            var cell_idx: usize = world.cell(x, y);
             if (x == world.player.x and y == world.player.y) {
-                idx = 38;
+                cell_idx = 38;
             }
             var frect = sprite_sheet.frectOf(x, y);
             frect.x -= Cast.itof32(world.ui.camera.x);
             frect.y -= Cast.itof32(world.ui.camera.y);
-            try s.render.Renderer.renderTexture(renderer.*, sprite_sheet.texture, sprite_sheet.coords.items[idx], frect);
+            try s.render.Renderer.renderTexture(renderer.*, sprite_sheet.texture, sprite_sheet.coords.items[cell_idx], frect);
             i += 1;
         }
     }
@@ -104,50 +96,14 @@ pub fn rescale(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprit
     _ = .{ world, renderer, sprite_sheet };
 
     try renderer.setScale(world.ui.zoom, world.ui.zoom);
-    world.ui.camera.w = Cast.ftoi32(Cast.itof32(world.ui.width) / world.ui.zoom);
-    world.ui.camera.h = Cast.ftoi32(Cast.itof32(world.ui.height) / world.ui.zoom);
-    world.ui.camera.x = @divFloor(Cast.itoi32(world.ui.width) - world.ui.camera.w, 2);
-    world.ui.camera.y = @divFloor(Cast.itoi32(world.ui.height) - world.ui.camera.h, 2);
+    // const w, const h = renderer.getCurrentOutputSize();
 
-    // const pc = sprite_sheet.frectOf(world.player.x, world.player.y).asOtherRect(i32);
-    //
-    // const z = Cast.ftoi32(world.ui.zoom);
-    // const cr = s.rect.IRect{
-    //     .x = z * pc.x, // * Cast.ftoi32(sprite_sheet.width),
-    //     .y = z * pc.y, // * Cast.ftoi32(sprite_sheet.height),
-    //     .w = Cast.itoi32(world.ui.width),
-    //     .h = Cast.itoi32(world.ui.height),
-    // };
-    //
-    // try renderer.setClipRect(cr);
+    // FIXME we need the min of screen.w, map.w & h
 
-    // std.debug.print("properties: {any}\n",.{props});
-    // try renderer.setLogicalPresentation(world.ui.width, world.ui.height, null);
+    world.ui.camera.w = Cast.ftoi32(Cast.itof32(world.ui.screen.w) / world.ui.zoom);
+    world.ui.camera.h = Cast.ftoi32(Cast.itof32(world.ui.screen.h) / world.ui.zoom);
+    world.ui.camera.x = @divFloor(Cast.itoi32(world.ui.screen.w) - world.ui.camera.w, 2);
+    world.ui.camera.y = @divFloor(Cast.itoi32(world.ui.screen.h) - world.ui.camera.h, 2);
 
-    //
-    // const tile_w: usize = @intFromFloat((sprite_sheet.width + 1.0) * world.ui.zoom);
-    // const tile_h: usize = @intFromFloat((sprite_sheet.height + 1.0) * world.ui.zoom);
-    //
-    // const map_w: usize = Cast.itou64(world.max.x) * tile_w;
-    // const map_h: usize = Cast.itou64(world.max.y) * tile_h;
-    //
-    // std.debug.print("\n tile {},{} -- map {},{}", .{ tile_w, tile_h, map_w, map_h });
-    //
-    // const rw, const rh = try renderer.getCurrentOutputSize();
-    // std.debug.print("\n osize {},{}\n", .{ rw, rh });
-    //
-    // const w = @max(map_w, rw);
-    // const h = @max(map_h, rh);
-    //
-    // std.debug.print("\n osize: {},{}\n", .{ w, h });
-    // // TODO - centre on player, not just centre
-    // const cx: i32 = Cast.itoi32((w -| rw) / 2);
-    // const cy: i32 = Cast.itoi32((h -| rh) / 2);
-    // _ = .{ cx, cy };
-    //
-    // renderer.renderCoordinatesToWindowCoordgccinates
-    // try renderer.setViewport(s.rect.IRect{ .x = cx, .y = cy, .w = Cast.itoi32(world.ui.width), .h = Cast.itoi32(world.ui.height) });
-
-    // try renderer.setLogicalPresentation(world.ui.width, world.ui.height, s.render.LogicalPresentation.letter_box);
-    // try renderer.setLogicalPresentation(200, 200, s.render.LogicalPresentation.letter_box);
+    world.ui.scale_changed = false;
 }

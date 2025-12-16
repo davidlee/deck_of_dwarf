@@ -43,15 +43,12 @@ pub const Cell = struct {
     fill_material: ?BaseMaterial,
     floor_material: ?BaseMaterial,
     liquid: ?Liquid,
-    items: ?*std.ArrayList(u8), // FIXME
+    items: bool, //?*std.ArrayList(u8), // FIXME
 };
 
 const UIState = struct {
     scale: f32,
     zoom: f32,
-    // TODO: move width and height into screen rect
-    width: usize,
-    height: usize,
 
     screen: rect.IRect,
     camera: rect.IRect,
@@ -61,7 +58,7 @@ const UIState = struct {
 pub const World = struct {
     player: struct { x: usize, y: usize }, // TODO move into point
     max: struct { x: usize, y: usize },
-    // map: *std.ArrayList(Cell),
+    map: std.ArrayList(usize), // TODO cell
     config: Config,
     ui: UIState,
 
@@ -73,15 +70,13 @@ pub const World = struct {
         const p = 1;
         const mx = w / (p + tw);
         const my = h / (p + th);
-        // var array_list = try std.ArrayList(Cell).initCapacity(alloc, mx * my);
-        _ = alloc;
 
         return @This(){
             .player = .{
                 .x = 0,
                 .y = 0,
             },
-            // .map = &array_list, // TODO:
+            .map = try std.ArrayList(usize).initCapacity(alloc, mx * my),
             .max = .{
                 .x = mx,
                 .y = my,
@@ -94,7 +89,7 @@ pub const World = struct {
                 .tile_height = th,
                 .tile_padding = p,
             },
-            .ui = UIState{ .scale = 1.0, .zoom = 1.0, .width = w, .height = h, .scale_changed = true, .screen = rect.IRect{
+            .ui = UIState{ .scale = 1.0, .zoom = 1.0, .scale_changed = true, .screen = rect.IRect{
                 .x = 0,
                 .y = 0,
                 .w = w,
@@ -109,6 +104,10 @@ pub const World = struct {
     }
 
     pub fn deinit(self: *World, alloc: std.mem.Allocator) void {
-        _ = .{ self, alloc };
+        self.map.deinit(alloc);
+    }
+
+    pub fn cell(self: *World, x: usize, y: usize) usize {
+        return self.map.items[(y * self.max.x) + x];
     }
 };
