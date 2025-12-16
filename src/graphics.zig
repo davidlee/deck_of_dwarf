@@ -1,5 +1,5 @@
 const std = @import("std");
-const World= @import("model").World;
+const World = @import("model").World;
 const Cast = @import("util").Cast;
 const s = @import("sdl3");
 
@@ -14,21 +14,18 @@ pub const SpriteSheet = struct {
     texture: s.render.Texture,
     coords: std.ArrayList(s.rect.FRect),
 
-    pub fn init(alloc: std.mem.Allocator, path: [:0]const u8, width: f32, height: f32, xs: usize, ys: usize, renderer: s.render.Renderer) !SpriteSheet{
+    pub fn init(alloc: std.mem.Allocator, path: [:0]const u8, width: f32, height: f32, xs: usize, ys: usize, renderer: s.render.Renderer) !SpriteSheet {
         const count = xs * ys;
         const surface = try s.image.loadFile(path);
         const texture = try renderer.createTextureFromSurface(surface);
 
         var coords = try std.ArrayList(s.rect.FRect).initCapacity(alloc, count);
 
-        for(0..ys) |y|
-            for(0..xs) |x|
-                try coords.append(
-                    alloc,
-                    SpriteSheet.FromXY(width, height, x, y)
-                );
+        for (0..ys) |y|
+            for (0..xs) |x|
+                try coords.append(alloc, SpriteSheet.FromXY(width, height, x, y));
 
-        return SpriteSheet {
+        return SpriteSheet{
             .path = path,
             .width = width,
             .height = height,
@@ -39,6 +36,7 @@ pub const SpriteSheet = struct {
             .texture = texture,
             .coords = coords,
         };
+        // texture.setScaleMode()
     }
 
     pub fn deinit(self: *SpriteSheet, alloc: std.mem.Allocator) void {
@@ -63,40 +61,50 @@ pub const SpriteSheet = struct {
     pub fn toXY(self: *SpriteSheet, x: f32, y: f32) s.rect.IRect {
         const ix: i32 = @divFloor(Cast.ftoi32(x), Cast.ftoi32(self.width) + 1);
         const iy: i32 = @divFloor(Cast.ftoi32(y), Cast.ftoi32(self.height) + 1);
-        return s.rect.IRect {
+        return s.rect.IRect{
             .x = ix,
             .y = iy,
-            .w= Cast.ftoi32(self.width),
-            .h= Cast.ftoi32(self.height),
+            .w = Cast.ftoi32(self.width),
+            .h = Cast.ftoi32(self.height),
         };
     }
 };
 
+pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *SpriteSheet) !void {
+    try renderer.clear();
 
-pub fn render(world: *World, renderer: *s.render.Renderer,  sprite_sheet: *SpriteSheet) !void {
-    var i:usize = 0;
-    for(0..Cast.itou64(world.max.y)) |y| {
-        for(0..Cast.itou64(world.max.x)) |x| {
+    // renderer.getCurrentOutputSize()
+    //
+    // renderer.setLogicalPresentation()
+
+    // TODO: when the ui is scaled, zoom in on either the character or the mouse position
+    // at present it's essentially zooming in on 0,0
+    try renderer.setScale(world.ui.zoom, world.ui.zoom);
+
+    // FIXME: use renderCoordinates when calculating mouse collision
+    // rather than the simple fromXY etc in SpriteSheet above
+    // try renderer.renderCoordinatesFromWindowCoordinates()
+
+    var i: usize = 0;
+    for (0..Cast.itou64(world.max.y)) |y| {
+        for (0..Cast.itou64(world.max.x)) |x| {
             var idx: usize = 0;
-            if( x == world.player.x and y == world.player.y) { idx = 38; }
+            if (x == world.player.x and y == world.player.y) {
+                idx = 38;
+            }
 
-            const xf:f32 = @floatFromInt(x);
-            const yf:f32 = @floatFromInt(y);
-            const frect = s.rect.FRect {
+            const xf: f32 = @floatFromInt(x);
+            const yf: f32 = @floatFromInt(y);
+            const frect = s.rect.FRect{
                 .x = (sprite_sheet.width + 1) * xf,
                 .y = (sprite_sheet.height + 1) * yf,
                 .w = sprite_sheet.width,
-                .h = sprite_sheet.height
+                .h = sprite_sheet.height,
             };
-            try s.render.Renderer.renderTexture(
-                renderer.*,
-                sprite_sheet.texture,
-                sprite_sheet.coords.items[idx],
-                frect
-            );
+            try s.render.Renderer.renderTexture(renderer.*, sprite_sheet.texture, sprite_sheet.coords.items[idx], frect);
             i += 1;
         }
     }
 
-    try s.render.Renderer.present(renderer.*);
+    try renderer.present();
 }

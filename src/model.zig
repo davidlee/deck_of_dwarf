@@ -34,7 +34,6 @@ pub const Liquid = struct {
     kind: u8, // FIXME:
 };
 
-
 pub const Cell = struct {
     x: i32,
     y: i32,
@@ -44,11 +43,19 @@ pub const Cell = struct {
     items: ?*std.ArrayList(u8), // FIXME
 };
 
+const UIState = struct {
+    scale: f32,
+    zoom: f32,
+    width: i32,
+    height: i32,
+};
+
 pub const World = struct {
-    player: struct{ x: i32, y: i32 },
-    max: struct{x: i32, y: i32},
+    player: struct { x: i32, y: i32 },
+    max: struct { x: i32, y: i32 },
     map: *std.ArrayList(Cell),
     config: Config,
+    ui: UIState,
 
     pub fn init(alloc: std.mem.Allocator) !@This() {
         const w = 1080;
@@ -60,23 +67,29 @@ pub const World = struct {
         const my = h / (p + th);
         var array_list = try std.ArrayList(Cell).initCapacity(alloc, mx * my);
 
-        return @This() {
+        return @This(){
             .player = .{
                 .x = 0,
                 .y = 0,
             },
             .map = &array_list, // TODO:
-            .max= .{
+            .max = .{
                 .x = mx,
                 .y = my,
             },
-            .config = Config {
+            .config = Config{
                 .fps = 60,
                 .screen_width = w,
                 .screen_height = h,
                 .tile_width = tw,
                 .tile_height = th,
                 .tile_padding = p,
+            },
+            .ui = UIState{
+                .scale = 1.0,
+                .zoom = 1.0,
+                .width = w,
+                .height = h,
             },
         };
     }
@@ -85,5 +98,3 @@ pub const World = struct {
         _ = .{ self, alloc };
     }
 };
-
-

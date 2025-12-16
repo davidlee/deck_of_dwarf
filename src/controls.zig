@@ -1,5 +1,5 @@
 const std = @import("std");
-const World= @import("model").World;
+const World = @import("model").World;
 const Cast = @import("util").Cast;
 const s = @import("sdl3");
 
