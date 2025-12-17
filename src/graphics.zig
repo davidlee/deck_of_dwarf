@@ -80,9 +80,9 @@ pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprite
     // try renderer.renderCoordinatesFromWindowCoordinates()
     // TODO when the ui is scaled, zoom in on either the character or the mouse position
     // at present it's essentially zooming in on 0,0
-    if (world.ui.scale_changed) {
-        try rescale(world, renderer, sprite_sheet);
-    }
+    // if (world.ui.scale_changed) {
+    try rescale(world, renderer, sprite_sheet);
+    // }
 
     var i: usize = 0;
     for (0..world.max.y) |y| {
@@ -93,7 +93,9 @@ pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprite
             }
             var frect = sprite_sheet.frectOf(x, y);
             frect.x += Cast.itof32(world.ui.camera.x);
+            // frect.x -= pr.x;
             frect.y += Cast.itof32(world.ui.camera.y);
+            // frect.y -= pr.y;
             try s.render.Renderer.renderTexture(renderer.*, sprite_sheet.texture, sprite_sheet.coords.items[cell_idx], frect);
             i += 1;
         }
@@ -104,15 +106,16 @@ pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprite
 
 pub fn rescale(world: *World, renderer: *s.render.Renderer, sprite_sheet: *SpriteSheet) !void {
     try renderer.setScale(world.ui.zoom, world.ui.zoom);
-    const size = sprite_sheet.renderSize(world.max.x, world.max.y, world.ui.zoom);
-    const x = (Cast.itof32(world.ui.screen.w) - size.x);
-    const y = (Cast.itof32(world.ui.screen.h) - size.y);
+    // _ = sprite_sheet;
+    const p = sprite_sheet.frectOf(world.player.x, world.player.y);
+    const x = Cast.itof32(world.ui.screen.w);
+    const y = Cast.itof32(world.ui.screen.h);
 
     // this absolute fucker
     // we need scale in the maths when calculating offset, BUT
     // need to remove it before applying the offset to camera, or it'll get applied twice
 
-    world.ui.camera.x = @intFromFloat(x / 2.0 / world.ui.zoom);
-    world.ui.camera.y = @intFromFloat(y / 2.0 / world.ui.zoom);
+    world.ui.camera.x = @intFromFloat(x / 2.0 / world.ui.zoom - p.x - (p.w / 2));
+    world.ui.camera.y = @intFromFloat(y / 2.0 / world.ui.zoom - p.y - (p.h / 2));
     world.ui.scale_changed = false;
 }

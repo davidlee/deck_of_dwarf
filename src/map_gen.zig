@@ -7,7 +7,7 @@ pub fn generateTerrain(alloc: std.mem.Allocator, world: *World) !void {
 
     for (0..world.max.y) |y|
         for (0..world.max.x) |x| {
-            const v = gen.noise2(@floatFromInt(x), @floatFromInt(y));
+            const v = gen.noise2(@floatFromInt(x * 10), @floatFromInt(y * 10));
             try world.map.append(alloc, (if (v > 0.3) 0 else 14));
         };
 }
