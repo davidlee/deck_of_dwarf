@@ -50,8 +50,8 @@ pub const SpriteSheet = struct {
         const fy: f32 = Cast.itof32(y);
 
         return s.rect.FRect{
-            .x = (1 + width) * fx,
-            .y = (1 + height) * fy,
+            .x = 1 + (1 + width) * fx,
+            .y = 1 + (1 + height) * fy,
             .w = width,
             .h = height,
         };
@@ -59,6 +59,15 @@ pub const SpriteSheet = struct {
 
     pub fn frectOf(self: *SpriteSheet, x: usize, y: usize) s.rect.FRect {
         return FRectOf(self.width, self.height, x, y);
+    }
+
+    pub fn renderSize(self: *SpriteSheet, xs: usize, ys: usize, scale: f32) s.rect.FPoint {
+        const fx: f32 = @floatFromInt(xs);
+        const fy: f32 = @floatFromInt(ys);
+        return .{
+            .x = scale * (1 + (self.width + 1) * fx),
+            .y = scale * (1 + (self.height + 1) * fy),
+        };
     }
 };
 
@@ -68,6 +77,11 @@ pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprite
     // FIXME use renderCoordinates when calculating mouse collision
     // rather than the simple fromXY etc in SpriteSheet above
     // try renderer.renderCoordinatesFromWindowCoordinates()
+    // TODO when the ui is scaled, zoom in on either the character or the mouse position
+    // at present it's essentially zooming in on 0,0
+    if (world.ui.scale_changed) {
+        try rescale(world, renderer, sprite_sheet);
+    }
 
     var i: usize = 0;
     for (0..world.max.y) |y| {
@@ -77,16 +91,11 @@ pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprite
                 cell_idx = 38;
             }
             var frect = sprite_sheet.frectOf(x, y);
-            frect.x -= Cast.itof32(world.ui.camera.x);
-            frect.y -= Cast.itof32(world.ui.camera.y);
+            frect.x += Cast.itof32(world.ui.camera.x);
+            frect.y += Cast.itof32(world.ui.camera.y);
             try s.render.Renderer.renderTexture(renderer.*, sprite_sheet.texture, sprite_sheet.coords.items[cell_idx], frect);
             i += 1;
         }
-    }
-    // TODO when the ui is scaled, zoom in on either the character or the mouse position
-    // at present it's essentially zooming in on 0,0
-    if (world.ui.scale_changed) {
-        try rescale(world, renderer, sprite_sheet);
     }
 
     try renderer.present();
@@ -96,12 +105,19 @@ pub fn rescale(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprit
     _ = .{ world, renderer, sprite_sheet };
 
     try renderer.setScale(world.ui.zoom, world.ui.zoom);
+
+    const size = sprite_sheet.renderSize(world.max.x, world.max.y, world.ui.zoom);
+    std.debug.print("size:{} -- {} \n", .{ size, world.ui.screen });
+    const w: f32 = @min(size.x, Cast.itof32(world.ui.screen.w));
+    const h: f32 = @min(size.y, Cast.itof32(world.ui.screen.h));
+
+    std.debug.print("x,y:{},{}\n", .{ w, h });
     // const w, const h = renderer.getCurrentOutputSize();
 
     // FIXME we need the min of screen.w, map.w & h
 
-    world.ui.camera.w = Cast.ftoi32(Cast.itof32(world.ui.screen.w) / world.ui.zoom);
-    world.ui.camera.h = Cast.ftoi32(Cast.itof32(world.ui.screen.h) / world.ui.zoom);
+    world.ui.camera.w = Cast.ftoi32(w * world.ui.zoom);
+    world.ui.camera.h = Cast.ftoi32(h * world.ui.zoom);
     world.ui.camera.x = @divFloor(Cast.itoi32(world.ui.screen.w) - world.ui.camera.w, 2);
     world.ui.camera.y = @divFloor(Cast.itoi32(world.ui.screen.h) - world.ui.camera.h, 2);
 

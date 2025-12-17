@@ -89,8 +89,6 @@ pub fn main() !void {
                     world.ui.scale_changed = true;
                 },
                 .window_resized => {
-                    // world.ui.width = Cast.itou64(event.window_resized.width);
-                    // world.ui.height = Cast.itou64(event.window_resized.height);
                     world.ui.screen.w = event.window_resized.width;
                     world.ui.screen.h = event.window_resized.height;
                     world.ui.scale_changed = true;
