@@ -62,11 +62,12 @@ pub const SpriteSheet = struct {
     }
 
     pub fn renderSize(self: *SpriteSheet, xs: usize, ys: usize, scale: f32) s.rect.FPoint {
+        // _ = scale;
         const fx: f32 = @floatFromInt(xs);
         const fy: f32 = @floatFromInt(ys);
         return .{
-            .x = scale * (1 + (self.width + 1) * fx),
-            .y = scale * (1 + (self.height + 1) * fy),
+            .x = (1 + (self.width + 1) * fx) * scale,
+            .y = (1 + (self.height + 1) * fy) * scale,
         };
     }
 };
@@ -102,24 +103,16 @@ pub fn render(world: *World, renderer: *s.render.Renderer, sprite_sheet: *Sprite
 }
 
 pub fn rescale(world: *World, renderer: *s.render.Renderer, sprite_sheet: *SpriteSheet) !void {
-    _ = .{ world, renderer, sprite_sheet };
-
     try renderer.setScale(world.ui.zoom, world.ui.zoom);
-
     const size = sprite_sheet.renderSize(world.max.x, world.max.y, world.ui.zoom);
-    std.debug.print("size:{} -- {} \n", .{ size, world.ui.screen });
-    const w: f32 = @min(size.x, Cast.itof32(world.ui.screen.w));
-    const h: f32 = @min(size.y, Cast.itof32(world.ui.screen.h));
+    const x = (Cast.itof32(world.ui.screen.w) - size.x);
+    const y = (Cast.itof32(world.ui.screen.h) - size.y);
 
-    std.debug.print("x,y:{},{}\n", .{ w, h });
-    // const w, const h = renderer.getCurrentOutputSize();
+    // this absolute fucker
+    // we need scale in the maths when calculating offset, BUT
+    // need to remove it before applying the offset to camera, or it'll get applied twice
 
-    // FIXME we need the min of screen.w, map.w & h
-
-    world.ui.camera.w = Cast.ftoi32(w * world.ui.zoom);
-    world.ui.camera.h = Cast.ftoi32(h * world.ui.zoom);
-    world.ui.camera.x = @divFloor(Cast.itoi32(world.ui.screen.w) - world.ui.camera.w, 2);
-    world.ui.camera.y = @divFloor(Cast.itoi32(world.ui.screen.h) - world.ui.camera.h, 2);
-
+    world.ui.camera.x = @intFromFloat(x / 2.0 / world.ui.zoom);
+    world.ui.camera.y = @intFromFloat(y / 2.0 / world.ui.zoom);
     world.ui.scale_changed = false;
 }
