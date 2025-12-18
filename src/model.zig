@@ -18,26 +18,6 @@ const Config = struct {
     }
 };
 
-pub const BaseMaterial = enum(u8) {
-    dirt,
-    stone,
-    mud,
-    sand,
-    clay,
-    wood,
-    metal,
-    ore,
-    mineral,
-    glass,
-    ice,
-    leather,
-    plant, // plant fibre
-    cloth,
-    bone,
-    chitin,
-    flesh,
-};
-
 const UIState = struct {
     zoom: f32,
     screen: rect.IRect,
