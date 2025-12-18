@@ -7,7 +7,6 @@ const Config = struct {
     fps: usize,
     width: usize,
     height: usize,
-    // screen: rect.IRect,
 
     fn init() @This() {
         return @This(){
@@ -36,11 +35,11 @@ const UIState = struct {
 pub const World = struct {
     config: Config,
     ui: UIState,
+    alloc: std.mem.Allocator,
 
     pub fn init(alloc: std.mem.Allocator) !@This() {
-        _ = alloc;
-
         return @This(){
+            .alloc = alloc,
             .config = Config.init(),
             .ui = UIState.init(),
         };
