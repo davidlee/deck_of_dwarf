@@ -1,25 +1,5 @@
-# deps
+# cardigan: an SDL game in zig
 
-## core 
+There's fuckall here, I just deleted everything. 
 
-SDL
-
-- https://codeberg.org/7Games/zig-sdl3
-
-Learning
-
-
-## later
-
-
-
-
-## sketch - viewport
-
-```
----------
-|  
-|    ,,,,,,,,,,,,,,
-|    ,            ,
-|    ,     x      ,
-```
+But, it's a potentially useful fuckall if you want a working shell to build on: zig, SDL3, a FSM library and a few other amenities build nicely under NixOS (there's a flake and everything).
