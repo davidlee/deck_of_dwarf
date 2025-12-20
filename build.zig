@@ -20,11 +20,6 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .ext_image = true,
     });
 
-    const polystate = b.dependency("polystate", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
     //
     // Internal modules
     //
@@ -34,11 +29,8 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     });
 
     exe_mod.addImport("sdl3", sdl3.module("sdl3"));
-    exe_mod.addImport("shared", shared_mod);
-
-    exe_mod.addImport("polystate", polystate.module("root"));
-
     exe_mod.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm"));
+    exe_mod.addImport("shared", shared_mod);
 
     const exe = b.addExecutable(.{
         .name = "cardigan",
