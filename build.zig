@@ -28,8 +28,9 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .root_source_file = b.path("src/shared.zig"),
     });
 
-    exe_mod.addImport("sdl3", sdl3.module("sdl3"));
-    exe_mod.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm"));
+    shared_mod.addImport("sdl3", sdl3.module("sdl3"));
+    shared_mod.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm"));
+
     exe_mod.addImport("shared", shared_mod);
 
     const exe = b.addExecutable(.{

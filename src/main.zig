@@ -1,13 +1,12 @@
 const std = @import("std");
-const Cast = @import("util.zig").Cast;
-const gfx = @import("graphics.zig");
-const ctl = @import("controls.zig");
-const ev = @import("events.zig");
-const World = @import("model.zig").World;
+const lib = @import("shared");
 
-const log = std.debug.print;
-
-const s = @import("sdl3");
+const Cast = lib.Cast;
+const log = lib.log;
+const gfx = lib.gfx;
+const World = lib.World;
+const s = lib.sdl;
+const ctrl = lib.ctrl;
 
 pub fn main() !void {
     defer s.shutdown();
@@ -29,7 +28,7 @@ pub fn main() !void {
     }
 
     const window = try s.video.Window.init(
-        "hello world",
+        "cardigan of the cardinal",
         world.config.width,
         world.config.height,
         .{ .resizable = true, .vulkan = true },
@@ -63,7 +62,7 @@ pub fn main() !void {
                 .quit => quit = true,
                 .terminating => quit = true,
                 .key_down => {
-                    quit = ctl.keypress(event.key_down.key.?, &world);
+                    quit = ctrl.keypress(event.key_down.key.?, &world);
                 },
                 .mouse_motion => {
                     world.ui.mouse = s.rect.FPoint{ .x = event.mouse_motion.x, .y = event.mouse_motion.y };
