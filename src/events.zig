@@ -85,13 +85,12 @@ pub const EventSystem = struct {
 
 pub const EventLog = struct {
     alloc: std.mem.Allocator,
-    entries: *std.ArrayList([]const u8),
+    entries: std.ArrayList([]const u8),
 
     pub fn init(alloc: std.mem.Allocator) !@This() {
-        var entries = try std.ArrayList([]const u8).initCapacity(alloc, 1000);
         return @This(){
             .alloc = alloc,
-            .entries = &entries,
+            .entries = try std.ArrayList([]const u8).initCapacity(alloc, 1000),
         };
     }
 

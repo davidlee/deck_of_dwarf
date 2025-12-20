@@ -30,7 +30,7 @@ pub fn main() !void {
 
     var world = try World.init(alloc);
     defer {
-        world.deinit(alloc);
+        world.deinit();
     }
 
     const window = try s.video.Window.init(

@@ -1,11 +1,7 @@
 const std = @import("std");
 const lib = @import("infra");
-const config = lib.config;
-const rect = lib.sdl.rect;
-// const zigfsm = lib.zigfsm;
 const zigfsm = @import("zigfsm");
 
-const body = @import("body.zig");
 const player = @import("player.zig");
 const random = @import("random.zig");
 const Player = player.Player;
@@ -55,13 +51,22 @@ pub const World = struct {
         };
     }
 
-    pub fn deinit(self: *World, alloc: std.mem.Allocator) void {
-        _ = .{ self, alloc };
+    pub fn deinit(self: *World) void {
         self.events.deinit();
     }
 
     pub fn step(self: *World) void {
         _ = .{self};
         //
+    }
+
+    // this could have been (and was) on RandomStreamDict but that would
+    // require it to have knowledge of World and gets dangerously close to
+    // introducing a cycle between events.zig and random.zig
+    //
+    pub fn drawRandom(self: *World, id: random.RandomStreamID) !f32 {
+        const r = self.random.get(id).random().float(f32);
+        try self.events.push(.{ .draw_random = .{ .stream = id, .result = r } });
+        return r;
     }
 };
