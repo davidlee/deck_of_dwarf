@@ -6,7 +6,7 @@ const fsm = lib.fsm;
 
 const body = @import("body.zig");
 
-const archetypes = .{
+pub const Archetype = .{
     .soldier = StatBlock{
         .power = 6,
         .speed = 5,
@@ -34,6 +34,7 @@ const archetypes = .{
         .presence = 4,
     },
 };
+
 pub const StatBlock = packed struct {
     // physical
     power: f32,
@@ -64,7 +65,7 @@ pub const StatBlock = packed struct {
         };
     }
 
-    fn init(template: StatBlock) StatBlock {
+    pub fn init(template: StatBlock) StatBlock {
         const s = StatBlock{};
         s.* = template;
         return s;
@@ -73,54 +74,10 @@ pub const StatBlock = packed struct {
 
 pub const Player = struct {
     stats: StatBlock,
-    wounds: struct {},
-    conditions: struct {},
+    wounds: void,
+    conditions: void,
 
-    fn init() Player {
+    pub fn init() Player {
         return Player{ .stats = StatBlock.splat(5), .wounds = {}, .conditions = {} };
-    }
-};
-
-pub const RandomStreamSet = struct {
-    combat: lib.random.Stream,
-    deck_builder: lib.random.Stream,
-    shuffler: lib.random.Stream,
-    effects: lib.random.Stream,
-
-    fn init() @This() {
-        return @This(){
-            .combat = lib.random.Stream.init(),
-            .deck_builder = lib.random.Stream.init(),
-            .shuffler = lib.random.Stream.init(),
-            .effects = lib.random.Stream.init(),
-        };
-    }
-};
-
-pub const Encounter = struct {};
-
-pub const World = struct {
-    alloc: std.mem.Allocator,
-    events: lib.events.EventSystem,
-    encounter: ?Encounter,
-    random: RandomStreamSet,
-
-    pub fn init(alloc: std.mem.Allocator) !@This() {
-        return @This(){
-            .alloc = alloc,
-            .events = try lib.events.EventSystem.init(alloc),
-            .encounter = null,
-            .random = RandomStreamSet.init(),
-        };
-    }
-
-    pub fn deinit(self: *World, alloc: std.mem.Allocator) void {
-        _ = .{ self, alloc };
-        self.events.deinit();
-    }
-
-    pub fn step(self: *World) void {
-        _ = .{self};
-        //
     }
 };

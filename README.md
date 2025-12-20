@@ -14,6 +14,222 @@ think along the lines of slay the spire / darkest dungeon, but with distinctly m
 
 I want to keep the scope reasonable for a side project, but ...
 
+
+## 1) Model the game as a pure state machine (commands in, events out)
+
+Even if you have animations/UI, keep the *core* as:
+
+* **State**: all authoritative game data
+* **Command**: a player/AI intent (“PlayCard {card_id, target}”)
+* **Resolver**: validates + applies rules
+* **Event log**: what happened (“DamageDealt”, “StatusApplied”, “CardMovedZones”)
+* **RNG stream**: explicit, seeded, reproducible
+
+This gives you:
+
+* deterministic replays
+* easy undo/redo (event-sourcing or snapshots)
+* “what-if” simulations for AI / balance tools
+* clean separation from rendering
+
+**Key idea:** avoid “do damage” functions that mutate lots of things ad-hoc. Instead: resolve a command into *events*, then apply events to state in a tight, predictable way.
+
+---
+
+## 2) Use “zones” + handles, not objects
+
+Card crawlers love zones: deck, hand, discard, exhaust, in-play, etc. The classic trap is storing pointers/references to cards that move around.
+
+Instead:
+
+* Cards are **entities-by-handle** (an integer id + generation)
+* Card data is split into:
+
+  * **static** card definition (immutable template data)
+  * **instance** state (upgrades, counters, per-run modifiers, bindings)
+* Zones store **handles**, not card structs.
+
+For Zig, a common pattern:
+
+* `CardId = u32` (or handle type)
+* Arrays:
+
+  * `card_instances: []CardInstance`
+  * `zone_hand: []CardId`, `zone_draw: []CardId`, etc.
+
+If you need fast membership / lookup:
+
+* keep an `owner_zone: []ZoneTag` table for each `CardId`
+* or store indices per zone + inverse index map
+
+This is data-oriented and avoids pointer invalidation.
+
+---
+
+## 3) Prefer “struct-of-arrays” where it matters, “array-of-structs” where it’s simpler
+
+You don’t need ECS, but you *do* want the benefits of SoA for hot paths:
+
+* statuses ticking each turn
+* iterating all enemies
+* evaluating triggers
+* pathfinding / sim loops
+
+A good compromise:
+
+* For “units” (player + monsters), use a **UnitStore** that is mostly SoA for hot fields:
+
+  * hp, max_hp, block, energy, position, ai_state, etc.
+* For rarely-touched or big data, store per-unit blobs or secondary arrays.
+
+This keeps systems simple and fast without adopting ECS “everything is a component”.
+
+---
+
+## 4) Composition via “rules + resolvers”, not inheritance
+
+Instead of OOP polymorphism, use:
+
+* tagged unions + switch
+* function tables only where necessary
+* or compile-time composition with `comptime` data
+
+Example: a card effect isn’t a method on a card object. It’s a **data definition** interpreted by a resolver:
+
+* `Effect = union(enum) { DealDamage, ApplyStatus, Draw, AddCardToDeck, Conditional, Sequence, … }`
+
+This is *great* for sim games because:
+
+* effects are serializable
+* you can build tooling around them
+* balance changes are data edits, not code edits
+* you can add “introspection” (AI evaluation, UI preview)
+
+When effects get too complex for pure data, you can still keep them structured:
+
+* `Effect.Custom = enum { VampireBite, MirrorImage, … }` and handle in one place
+
+---
+
+## 5) “Queries” as explicit precomputed views (not dynamic object graphs)
+
+Deep simulation gets expensive if every rule scans “everything”.
+
+Pattern:
+
+* maintain small **indexes** / **views** that update when events apply:
+
+  * list of units with `Status.Poison`
+  * list of cards in hand that are playable
+  * per-unit trigger subscriptions (see next section)
+
+Then systems operate on these views in tight loops.
+
+---
+
+## 6) Triggers: avoid “broadcast to everyone”; use subscriptions keyed by event type
+
+Card crawlers often explode into “on X do Y” effects.
+
+Instead of iterating every card/status/relic to ask “do you care about this event?”:
+
+* define event types
+* maintain subscriber lists per event type, per scope (global/player/unit)
+
+When you apply an event, you:
+
+1. push it to a queue
+2. dispatch to subscribers
+3. subscribers can enqueue new events (careful with recursion—use a queue)
+
+This is deterministic and scales.
+
+You can also add a **budget / depth limit** to prevent infinite loops and surface a clear error when a design creates a cycle.
+
+---
+
+## 7) Use a single “GameArena” per run, and reset between runs
+
+For roguelikes, lifetime patterns are clean:
+
+* A long-lived allocator for app/UI/assets
+* A per-run arena allocator for:
+
+  * generated dungeon
+  * card instances
+  * combat state
+  * temporary sim buffers
+
+Zig makes it easy to enforce “this memory dies with the run”.
+
+For transient per-frame scratch, use another arena or `std.heap.FixedBufferAllocator` for predictable performance.
+
+---
+
+## 8) Determinism: make RNG an explicit dependency everywhere
+
+If you want “deep simulationist”:
+
+* seed RNG once
+* store it in state
+* pass `*Rng` into anything that needs randomness
+* never call global randomness
+
+Also: be careful about iteration order.
+
+* Hash maps can ruin determinism unless you control traversal.
+* Prefer arrays or sorted keys for deterministic iteration.
+
+---
+
+## 9) Testing patterns that pay off massively
+
+You can unit test “rules” without UI:
+
+* “Given state S, when command C, then events E, and resulting state S’”
+* snapshot tests: serialize state/events to a stable format
+* replay tests: apply recorded command sequences; ensure same resulting hash
+
+A nice trick: compute a stable hash of state (excluding ephemeral fields) and assert it in regression tests.
+
+---
+
+## 10) Practical architecture sketch (works well in Zig)
+
+**Modules:**
+
+* `model/` : data structs, ids/handles, enums, serialization
+* `rules/` : command validation, effect resolution, trigger dispatch
+* `apply/` : event -> state mutation (tight, boring, reliable)
+* `sim/` : AI evaluation, “what-if”, Monte Carlo, etc.
+* `content/` : card defs, relic defs, enemy defs, encounters
+* `ui/` : reads state + event stream to animate/present
+
+**Run loop:**
+
+* gather input -> command
+* `resolve(command, &state) -> []Event`
+* `apply(events, &state)`
+* `dispatch_triggers(events)` (which adds more events)
+* repeat until queue empty
+* emit final event list to UI
+
+---
+
+## 11) Two “gotchas” to watch early
+
+### A) Don’t over-index too soon
+
+Indexing (views/subscriptions) is great, but early on it can lock you into a design. Start with simple scans, measure, then add views for the real hotspots (usually triggers/status ticking).
+
+### B) Keep “apply” dumb and centralized
+
+The moment you let random systems mutate state directly, deep sim becomes impossible to reason about.
+Try to keep *all state mutation* going through event application.
+
+---
+
+No ECS, no OOP—just clean data + explicit systems.
 --
 so i was toying with a DF style inventory & injury system - which I have sketched out (the kind of system that handles realistic armour layering, wearing goggles around your neck or helmet visor up/down, and chunky rings that can be worn under leather gauntlets but not nitrile gloves) but .. TBD if that's fun. I'm in the process of exploring / modelling a lot of systems to select the ones which might make a game that's fun to play and tractable to build.
 
@@ -422,4 +638,3 @@ One critical question is how much of a feature randomness is in basic attack / d
 - all - each attack is a "roll" which might succeed or fail; damage is a random range
 
 I might try the deterministic route first.
-

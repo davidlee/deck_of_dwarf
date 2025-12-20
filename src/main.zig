@@ -6,7 +6,7 @@ const log = lib.log;
 const s = lib.sdl;
 
 // const gfx = lib.gfx;
-const World = @import("model.zig").World;
+const World = @import("world.zig").World;
 const ctrl = @import("controls.zig");
 const gfx = @import("graphics.zig");
 

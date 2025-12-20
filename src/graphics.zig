@@ -1,5 +1,5 @@
 const std = @import("std");
-const World = @import("model.zig").World;
+const World = @import("world.zig").World;
 const lib = @import("infra");
 const Cast = lib.util.Cast;
 const s = lib.sdl;
