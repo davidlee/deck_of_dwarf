@@ -7,6 +7,7 @@ const zigfsm = @import("zigfsm");
 
 const body = @import("body.zig");
 const player = @import("player.zig");
+const random = @import("random.zig");
 const Player = player.Player;
 const events = @import("events.zig");
 const EventSystem = events.EventSystem;
@@ -26,51 +27,13 @@ const GameState = enum {
     animating,
 };
 
-pub const RandomStreamID = enum {
-    combat,
-    deck_builder,
-    shuffler,
-    effects,
-};
-
-pub const RandomStreamDict = struct {
-    combat: lib.random.Stream,
-    deck_builder: lib.random.Stream,
-    shuffler: lib.random.Stream,
-    effects: lib.random.Stream,
-
-    fn init() @This() {
-        return @This(){
-            .combat = lib.random.Stream.init(),
-            .deck_builder = lib.random.Stream.init(),
-            .shuffler = lib.random.Stream.init(),
-            .effects = lib.random.Stream.init(),
-        };
-    }
-    fn get(self: *RandomStreamDict, id: RandomStreamID) !lib.random.Stream {
-        return switch (id) {
-            RandomStreamID.combat => self.combat,
-            RandomStreamID.deck_builder => self.deck_builder,
-            RandomStreamID.shuffler => self.shuffler,
-            RandomStreamID.effects => self.effects,
-            else => unreachable,
-        };
-    }
-    pub fn drawRandom(self: *RandomStreamDict, world: *World, id: RandomStreamID) !f32 {
-        var stream = try self.get(id);
-        const r = stream.rng.float(f32);
-        try world.events.push(Event{ .draw_random = .{ .stream = id, .result = r } });
-        return r;
-    }
-};
-
 pub const Encounter = struct {};
 
 pub const World = struct {
     alloc: std.mem.Allocator,
     events: EventSystem,
     encounter: ?Encounter,
-    random: RandomStreamDict,
+    random: random.RandomStreamDict,
     player: Player,
     fsm: zigfsm.StateMachine(GameState, GameEvent, .wait_for_player),
 
@@ -86,7 +49,7 @@ pub const World = struct {
             .alloc = alloc,
             .events = try EventSystem.init(alloc),
             .encounter = null,
-            .random = RandomStreamDict.init(),
+            .random = random.RandomStreamDict.init(),
             .player = Player.init(),
             .fsm = fsm,
         };

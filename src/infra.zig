@@ -5,7 +5,7 @@ pub const util = @import("util.zig");
 pub const config = @import("config.zig");
 pub const Config = config.Config;
 pub const Cast = @import("util.zig").Cast;
-pub const random = @import("random.zig");
+// pub const random = @import("random.zig");
 
 // 3rd party libs
 pub const zigfsm = @import("zigfsm");

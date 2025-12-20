@@ -1,6 +1,6 @@
 const std = @import("std");
 const EntityID = @import("entity.zig").EntityID;
-const RandomStreamID = @import("world.zig").RandomStreamID;
+const RandomStreamID = @import("random.zig").RandomStreamID;
 const Slot = void; // TODO what's this look like?
 //
 pub const CardWithSlot = struct {
