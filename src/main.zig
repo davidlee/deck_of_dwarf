@@ -1,9 +1,9 @@
 const std = @import("std");
-const Cast = @import("util").Cast;
-const gfx = @import("graphics");
-const ctl = @import("controls");
-const ev = @import("events");
-const World = @import("model").World;
+const Cast = @import("util.zig").Cast;
+const gfx = @import("graphics.zig");
+const ctl = @import("controls.zig");
+const ev = @import("events.zig");
+const World = @import("model.zig").World;
 
 const log = std.debug.print;
 

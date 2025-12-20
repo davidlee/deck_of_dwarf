@@ -1,6 +1,6 @@
 const std = @import("std");
-const World = @import("model").World;
-const Cast = @import("util").Cast;
+const World = @import("model.zig").World;
+const Cast = @import("util.zig").Cast;
 const s = @import("sdl3");
 
 pub fn keypress(keycode: s.keycode.Keycode, world: *World) bool {

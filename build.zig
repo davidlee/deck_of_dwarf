@@ -10,6 +10,7 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .optimize = optimize,
     });
 
+    //
     // external dependencies
     //
     const sdl3 = b.dependency("sdl3", .{
@@ -24,72 +25,27 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .optimize = optimize,
     });
 
-    const znoise = b.dependency("znoise", .{});
+    //
+    // Internal modules
+    //
 
-    const util = b.createModule(.{
-        .root_source_file = b.path("src/util.zig"),
-        .target = target,
-        .optimize = optimize,
+    const shared_mod = b.addModule("shared", .{
+        .root_source_file = b.path("src/shared.zig"),
     });
 
-    const model = b.createModule(.{
-        .root_source_file = b.path("src/model.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    model.addImport("sdl3", sdl3.module("sdl3")); // rect
-    model.addImport("util", util);
+    exe_mod.addImport("sdl3", sdl3.module("sdl3"));
+    exe_mod.addImport("shared", shared_mod);
 
-    const graphics = b.createModule(.{
-        .root_source_file = b.path("src/graphics.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    graphics.addImport("sdl3", sdl3.module("sdl3"));
-    graphics.addImport("util", util);
-    graphics.addImport("model", model);
+    exe_mod.addImport("polystate", polystate.module("root"));
 
-    const controls = b.createModule(.{
-        .root_source_file = b.path("src/controls.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    controls.addImport("sdl3", sdl3.module("sdl3"));
-    controls.addImport("util", util);
-    controls.addImport("model", model);
-
-    const events = b.createModule(.{
-        .root_source_file = b.path("src/events.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const slot_map = b.createModule(.{
-        .root_source_file = b.path("src/slot_map.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    exe_mod.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm"));
 
     const exe = b.addExecutable(.{
         .name = "cardigan",
         .root_module = exe_mod,
     });
 
-    exe_mod.addImport("sdl3", sdl3.module("sdl3"));
-    exe_mod.addImport("util", util);
-    exe_mod.addImport("model", model);
-    exe_mod.addImport("graphics", graphics);
-    exe_mod.addImport("controls", controls);
-    exe_mod.addImport("polystate", polystate.module("root"));
-    exe_mod.addImport("events", events);
-    exe_mod.addImport("slot_map", slot_map);
-
-    exe_mod.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm"));
-
     b.installArtifact(exe);
-
-    exe.linkLibrary(znoise.artifact("FastNoiseLite"));
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -102,6 +58,7 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
     run_step.dependOn(&run_cmd.step);
 }
 
+// FIXME - needs includes for parity with non-web
 fn buildWeb(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) !void {
     const activateEmsdk = zemscripten.activateEmsdkStep(b);
     b.default_step.dependOn(activateEmsdk);

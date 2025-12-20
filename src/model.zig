@@ -32,6 +32,29 @@ const UIState = struct {
     }
 };
 
+pub const StatBlock = packed struct {
+    // physical
+    power: f32,
+    speed: f32,
+    agility: f32,
+    dexterity: f32,
+    fortitude: f32,
+    endurance: f32,
+    // mental
+    acuity: f32,
+    will: f32,
+    intuition: f32,
+    presence: f32,
+};
+
+// Dorsal Symmetry
+pub const Side = enum { Left, Right };
+pub const HumanoidBodyPart = enum { Head, Neck, Chest };
+
+pub const Wound = struct {};
+
+pub const Player = struct {};
+
 pub const World = struct {
     config: Config,
     ui: UIState,
