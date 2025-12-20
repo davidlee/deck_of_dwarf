@@ -8,8 +8,9 @@ const zigfsm = @import("zigfsm");
 const body = @import("body.zig");
 const player = @import("player.zig");
 const Player = player.Player;
-const EventSystem = @import("events.zig").EventSystem;
-const EventLog = @import("events.zig").EventLog;
+const events = @import("events.zig");
+const EventSystem = events.EventSystem;
+const Event = events.Event;
 
 const GameEvent = enum {
     start_game,
@@ -46,7 +47,7 @@ pub const RandomStreamDict = struct {
             .effects = lib.random.Stream.init(),
         };
     }
-    pub fn get(self: *RandomStreamDict, id: RandomStreamID) !lib.random.Stream {
+    fn get(self: *RandomStreamDict, id: RandomStreamID) !lib.random.Stream {
         return switch (id) {
             RandomStreamID.combat => self.combat,
             RandomStreamID.deck_builder => self.deck_builder,
@@ -54,6 +55,12 @@ pub const RandomStreamDict = struct {
             RandomStreamID.effects => self.effects,
             else => unreachable,
         };
+    }
+    pub fn drawRandom(self: *RandomStreamDict, world: *World, id: RandomStreamID) !f32 {
+        var stream = try self.get(id);
+        const r = stream.rng.float(f32);
+        try world.events.push(Event{ .draw_random = .{ .stream = id, .result = r } });
+        return r;
     }
 };
 
@@ -66,7 +73,6 @@ pub const World = struct {
     random: RandomStreamDict,
     player: Player,
     fsm: zigfsm.StateMachine(GameState, GameEvent, .wait_for_player),
-    event_log: EventLog,
 
     pub fn init(alloc: std.mem.Allocator) !@This() {
         var fsm = zigfsm.StateMachine(GameState, GameEvent, .wait_for_player).init();
@@ -83,7 +89,6 @@ pub const World = struct {
             .random = RandomStreamDict.init(),
             .player = Player.init(),
             .fsm = fsm,
-            .event_log = try EventLog.init(alloc),
         };
     }
 

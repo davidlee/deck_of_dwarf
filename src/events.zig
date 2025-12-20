@@ -13,6 +13,11 @@ pub const CardWithEvent = struct {
     event_index: usize, // in the EventSystem.current_events queue - must exist
 };
 
+pub const RandomWithMeta = struct {
+    stream: RandomStreamID,
+    result: f32,
+};
+
 // tagged union: events
 pub const Event = union(enum) {
     entity_died: u32, // Payload: just the ID
@@ -30,7 +35,7 @@ pub const Event = union(enum) {
     equipped_passive: CardWithSlot,
     unequipped_passive: CardWithSlot,
 
-    draw_random: RandomStreamID,
+    draw_random: RandomWithMeta,
 
     play_sound: struct { // Payload: struct
         id: u16,
@@ -44,18 +49,21 @@ pub const EventSystem = struct {
     current_events: std.ArrayList(Event),
     next_events: std.ArrayList(Event),
     alloc: std.mem.Allocator,
+    logger: EventLog,
 
     pub fn init(alloc: std.mem.Allocator) !EventSystem {
         return .{
             .current_events = try std.ArrayList(Event).initCapacity(alloc, 1000),
             .next_events = try std.ArrayList(Event).initCapacity(alloc, 1000),
             .alloc = alloc,
+            .logger = try EventLog.init(alloc),
         };
     }
 
     pub fn deinit(self: *EventSystem) void {
         self.current_events.deinit(self.alloc);
         self.next_events.deinit(self.alloc);
+        self.logger.deinit();
     }
 
     // Systems call this to queue something for NEXT frame
@@ -88,6 +96,6 @@ pub const EventLog = struct {
     }
 
     pub fn deinit(self: *EventLog) void {
-        self.entries.deinit();
+        self.entries.deinit(self.alloc);
     }
 };
