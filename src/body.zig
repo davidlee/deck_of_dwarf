@@ -1,42 +1,43 @@
 const std = @import("std");
+const DamageKind = @import("damage.zig").Kind;
 
 pub const PartIndex = u16; // Up to 65k body parts is enough
 pub const NO_PARENT = std.math.maxInt(PartIndex);
 
 pub const Tag = enum {
     // Human exterior bits
-    Head,
-    Eye,
-    Nose,
-    Ear,
-    Neck,
-    Torso,
-    Abdomen,
-    Shoulder,
-    Groin,
-    Arm,
-    Elbow,
-    Forearm,
-    Wrist,
-    Hand,
-    Finger,
-    Thumb,
-    Thigh,
-    Knee,
-    Shin,
-    Ankle,
-    Foot,
-    Toe,
-    // Human organs
-    Brain,
-    Heart,
-    Lung,
-    Stomach,
-    Liver,
-    Intestine,
-    Tongue,
-    Trachea,
-    Spleen,
+    head,
+    eye,
+    nose,
+    ear,
+    neck,
+    torso,
+    abdomen,
+    shoulder,
+    groin,
+    arm,
+    elbow,
+    forearm,
+    wrist,
+    hand,
+    finger,
+    thumb,
+    thigh,
+    knee,
+    shin,
+    ankle,
+    foot,
+    toe,
+    // human organs
+    brain,
+    heart,
+    lung,
+    stomach,
+    liver,
+    intestine,
+    tongue,
+    trachea,
+    spleen,
     // // Human bones
     // Skull,
     // Tooth,
@@ -50,9 +51,9 @@ pub const Tag = enum {
     // Other creature bits ...
 };
 
-pub const Side = enum(u8) { Left, Right, Center, None };
+pub const Side = enum(u8) { left, right, center, none };
 
-pub const TissueLayer = enum { Bone, Artery, Muscle, Fat, Nerve, Skin };
+pub const TissueLayer = enum { bone, artery, muscle, fat, nerve, skin };
 
 pub const Part = struct {
     name_hash: u32, // e.g. hash("left_index_finger") for lookups
@@ -129,7 +130,7 @@ pub const Body = struct {
 pub const Wound = struct {
     tissue: TissueLayer,
     severity: f32, // 0.0 to 1.0 (Severed / Crushed)
-    type: enum { Blunt, Cut, Pierce, Burn, Acid },
+    type: DamageKind,
     // dressing
     // infection
 };
@@ -154,8 +155,8 @@ fn definePart(
 }
 
 pub const HumanoidPlan = [_]PartDef{
-    definePart("torso", .Torso, .Center, null),
-    definePart("head", .Head, .Center, "torso"),
-    definePart("neck", .Neck, .Center, "torso"),
+    definePart("torso", .torso, .Center, null),
+    definePart("head", .head, .center, "torso"),
+    definePart("neck", .neck, .center, "torso"),
     // ...
 };
