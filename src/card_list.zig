@@ -18,19 +18,13 @@ const ID = cards.ID;
 var template_id: ID = 0;
 var technique_id: ID = 0;
 
-// // ID helpers
-// fn nextID(comptime currID: *cards.ID) cards.ID {
-//     currID.* += 1;
-//     return currID;
-// }
-
 fn hashName(comptime name: []const u8) u64 {
     return std.hash.Wyhash.hash(0, name);
 }
 
-const techniqueData = struct { name: []const u8, damage: damage.Base, difficulty: f32, deflect_mult: f32, dodge_mult: f32, counter_mult: f32, parry_mult: f32 };
+const TechniqueData = struct { name: []const u8, damage: damage.Base, difficulty: f32, deflect_mult: f32, dodge_mult: f32, counter_mult: f32, parry_mult: f32 };
 
-fn defineTechnique(data: techniqueData) Technique {
+fn defineTechnique(data: TechniqueData) Technique {
     return Technique{
         .id = hashName(data.name),
         .name = data.name,
@@ -83,7 +77,7 @@ const TechniqueEntries = [_]Technique{
         .counter_mult = 1.3,
         .parry_mult = 1.2,
     }),
-    
+
     // TODO: maybe - separate defensive tactics out
     defineTechnique(.{
         .name = "deflect",
@@ -136,82 +130,73 @@ pub const Techniques: TechniqueRepository = &.{
     .entries = TechniqueEntries,
 };
 
-pub const BeginnerDeck = [_]cards.Template{
-    .{
-        .id = 0,
+// -----------------------------------------------------------------------------
+// Template helpers
+// -----------------------------------------------------------------------------
+
+const ActionData = struct {
+    name: []const u8,
+    description: []const u8,
+    technique: []const u8,
+    tags: TagSet = .{},
+    cost: Cost,
+    rarity: cards.Rarity,
+    target: cards.TargetQuery,
+};
+
+fn defineTemplate(comptime data: ActionData) cards.Template {
+    return .{
+        .id = hashName(data.name),
         .kind = .action,
-        .name = "thrust",
-        .description = "hit them with the pokey bit",
-        .rarity = .common,
-        .tags = .{
-            .melee = true,
-            .offensive = true,
-        },
+        .name = data.name,
+        .description = data.description,
+        .rarity = data.rarity,
+        .tags = data.tags,
         .rules = &.{
             .{
                 .trigger = .on_play,
                 .valid = .always,
-                .expressions = &.{Expression{
-                    .effect = .{
-                        .combat_technique = TechniqueRepository.byName("thrust"),
-                    },
+                .expressions = &.{.{
+                    .effect = .{ .combat_technique = TechniqueRepository.byName(data.technique) },
                     .filter = null,
-                    .target = .all_enemies,
+                    .target = data.target,
                 }},
             },
         },
-        .cost = Cost{ .stamina = 2.5, .time = 0.3 },
-    },
+        .cost = data.cost,
+    };
+}
 
-    .{
-        .id = 1,
-        .kind = .action,
+// -----------------------------------------------------------------------------
+// Starter deck
+// -----------------------------------------------------------------------------
+
+pub const BeginnerDeck = [_]cards.Template{
+    defineTemplate(.{
+        .name = "thrust",
+        .description = "hit them with the pokey bit",
+        .technique = "thrust",
+        .tags = .{ .melee = true, .offensive = true },
+        .cost = .{ .stamina = 2.5, .time = 0.3 },
+        .rarity = .common,
+        .target = .all_enemies,
+    }),
+    defineTemplate(.{
         .name = "slash",
         .description = "slash them like a pirate",
+        .technique = "swing",
+        .tags = .{ .melee = true, .offensive = true },
+        .cost = .{ .stamina = 3.0, .time = 0.3 },
         .rarity = .common,
-        .tags = TagSet{
-            .melee = true,
-            .offensive = true,
-        },
-        .rules = &.{
-            .{
-                .trigger = .on_play,
-                .valid = .always, // slashing damage
-                .expressions = &.{Expression{
-                    .effect = .{
-                        .combat_technique = TechniqueRepository.byName("swing"),
-                    },
-                    .filter = null,
-                    .target = .all_enemies,
-                }},
-            },
-        },
-        .cost = Cost{ .stamina = 3.0, .time = 0.3 },
-    },
-
-    .{
-        .id = 2,
-        .kind = .action,
+        .target = .all_enemies,
+    }),
+    defineTemplate(.{
         .name = "shield block",
-        .description = "defend",
+        .description = "defend with your shield",
+        .technique = "block",
+        .tags = .{ .melee = true, .defensive = true },
+        .cost = .{ .stamina = 2.0, .time = 0.3 },
         .rarity = .common,
-        .tags = TagSet{
-            .melee = true,
-            .defensive = true,
-        },
-        .rules = &.{
-            .{
-                .trigger = .on_play,
-                .valid = .always, // slashing damage
-                .expressions = &.{Expression{
-                    .effect = .{
-                        .combat_technique = TechniqueRepository.byName("swing"),
-                    },
-                    .filter = null,
-                    .target = .all_enemies,
-                }},
-            },
-        },
-        .cost = Cost{ .stamina = 2.0, .time = 0.3 },
-    },
+        .target = .self,
+    }),
 };

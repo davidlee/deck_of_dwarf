@@ -39,6 +39,10 @@ pub const Deck = struct {
     }
     
     pub fn deinit(self: *Deck) void {
+        // Free all allocated instances
+        for (self.entities.items.items) |instance| {
+            self.alloc.destroy(instance);
+        }
         self.entities.deinit();
         self.deck.deinit(self.alloc);
         self.hand.deinit(self.alloc);

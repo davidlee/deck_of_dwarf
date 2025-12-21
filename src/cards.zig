@@ -8,7 +8,7 @@ const damage = @import("damage.zig");
 const stats = @import("stats.zig");
 const body = @import("body.zig");
 
-pub const ID = u16;
+pub const ID = u64;
 
 pub const Kind = enum {
     action,
