@@ -153,6 +153,8 @@ fn definePart(
         .trauma_mult = 1.0,
     };
 }
+// to look up parts by ID at runtime, store a std.AutoHashMap(u64, PartIndex) 
+// when building the body, using part.id.hash as the key.
 
 pub const HumanoidPlan = [_]PartDef{
     // Core

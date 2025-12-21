@@ -7,14 +7,8 @@ const EntityID = @import("entity.zig").EntityID;
 const damage = @import("damage.zig");
 const stats = @import("stats.zig");
 const body = @import("body.zig");
-const actions = @import("actions.zig");
 
 pub const ID = u16;
-
-fn nextCardID(comptime currID: *ID) ID {
-    currID.* += 1;
-    return currID;
-}
 
 pub const Kind = enum {
     action,
@@ -78,11 +72,6 @@ pub const Comparator = enum {
     gt,
 };
 
-pub const ScalingSpec = struct {
-    stats: .{ stats.Accessor, ?stats.Accessor },
-    ratio: f32 = 1.0,
-};
-
 pub const Cost = struct {
     stamina: f32,
     time: f32 = 0.3,
@@ -115,25 +104,33 @@ pub const TargetQuery = union(enum) {
     event_source,
 };
 
+const Technique = struct {
+    id: ID,
+    name: []const u8,
+    damage: damage.Base,
+    difficulty: f32, 
+    
+    // region: null, // hit location weighting
+    
+    // multiplier for defender's roll (0.0 - 2.0):
+    deflect_mult: f32 = 1.0,
+    parry_mult: f32 = 1.0,
+    dodge_mult: f32 = 1.0,
+    counter_mult: f32 = 1.0,
+};
+
 pub const Effect = union(enum) {
-    apply_damage: struct {
-        base: damage.Packet, // numbers derived from card definition
-        scaling: ScalingSpec, // e.g. { stat = .power, ratio = 0.6 }
-        kind: damage.Kind,
-        action_ref: actions.ID, // optional, for logging/interrupt
-    },
-    start_action: actions.Spec,
+    combat_technique: Technique,
     modify_stamina: struct {
         amount: i32,
         ratio: f32,
     },
     move_card: struct { from: Zone, to: Zone },
-    // add_modifier: ModifierSpec,
     add_condition: damage.Condition,
     remove_condition: damage.Condition,
     exhaust_card: EntityID,
     return_exhausted_card: EntityID,
-    interrupt_action,
+    interrupt,
     emit_event: Event,
 };
 

@@ -1,3 +1,9 @@
+
+pub const Scaling = struct {
+    stats: .{ Accessor, ?Accessor },
+    ratio: f32 = 1.0,
+};
+
 pub const Accessor = enum {
     power,
     speed,

@@ -1,6 +1,7 @@
 const std = @import("std");
 const lib = @import("infra");
-pub const BodyPartTag = @import("body.zig").BodyPartTag;
+const BodyPartTag = @import("body.zig").BodyPartTag;
+const Scaling = @import("stats.zig").Scaling;
 
 // DoT are separate 
 // 
@@ -96,12 +97,13 @@ pub const Kind = enum {
 };
 
 pub const Instance = struct {
-    amount: i32,
+    amount: f32,
     types: []const Kind,
 };
 
-pub const Packet = struct {
+pub const Base = struct {
     instances: []const Instance,
+    scaling: Scaling,
 };
 
 pub const Category = enum {
