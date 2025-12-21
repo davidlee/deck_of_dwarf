@@ -1,9 +1,12 @@
 const std = @import("std");
+// const assert = std.testing.expectEqual
 const lib = @import("infra");
 const Event = @import("events.zig").Event;
 const EventTag = std.meta.Tag(Event); // std.meta.activeTag(event) for cmp
 const EntityID = @import("entity.zig").EntityID;
-const BodyPartTag = @import("body.zig").BodyPartTag;
+const damage = @import("damage.zig");
+const stats = @import("stats.zig");
+pub const AnatomyTag = @import("body.zig").AnatomyTag;
 
 const CardKind = enum {
     Action,
@@ -34,30 +37,7 @@ pub const ModifierHooks = struct {
     use_stamina_pipeline: bool = false,
     use_time_pipeline: bool = false,
 };
-const DamageType = enum {
-    blunt,
-    piercing,
-    slashing,
-    fire,
-    acid,
-    arcane,
-};
-const DamageInstance = struct {
-    amount: i32,
-    types: []const DamageType,
-};
-pub const DamagePacket = struct {
-    instances: []const DamageInstance,
-};
 
-pub const ScalingSpec = struct {
-    stat: StatAccessor = .power,
-    ratio: f32 = 1.0,
-};
-pub const DamageKind = enum {
-    physical,
-    elemental,
-};
 pub const ActionRef = ?u32;
 pub const ActionSpec = struct {
     duration: f32 = 1.0,
@@ -73,9 +53,9 @@ pub const Zone = enum {
 pub const ModifierSpec = struct {};
 pub const OpSpec = union(enum) {
     ApplyDamage: struct {
-        base: DamagePacket, // numbers derived from card definition
-        scaling: ScalingSpec, // e.g. { stat = .power, ratio = 0.6 }
-        damage_kind: DamageKind,
+        base: damage.Packet, // numbers derived from card definition
+        scaling: damage.ScalingSpec, // e.g. { stat = .power, ratio = 0.6 }
+        damage_kind: damage.Kind,
         action_ref: ActionRef, // optional, for logging/interrupt
     },
     StartAction: ActionSpec,
@@ -86,7 +66,7 @@ pub const OpSpec = union(enum) {
 };
 pub const Predicate = union(enum) {
     AlwaysTrue,
-    CompareStat: struct { lhs: StatAccessor, op: CmpOp, rhs: Value },
+    CompareStat: struct { lhs: stats.Accessor, op: CmpOp, rhs: Value },
     HasTag: Tag,
     Not: *Predicate,
     And: []const Predicate,
@@ -95,18 +75,7 @@ pub const Predicate = union(enum) {
 pub const Tag = enum {
     none,
 };
-pub const StatAccessor = enum {
-    power,
-    speed,
-    agility,
-    dexterity,
-    fortitude,
-    endurance,
-    acuity,
-    will,
-    intuition,
-    presence,
-};
+
 pub const CmpOp = enum {
     lt,
     lte,
@@ -116,14 +85,14 @@ pub const CmpOp = enum {
 };
 pub const Value = union(enum) {
     constant: f32,
-    stat: StatAccessor,
+    stat: stats.Accessor,
 };
 pub const TargetQuery = union(enum) {
-    Single: Selector, // e.g. explicit target chosen during play
-    AllEnemies,
-    Self,
-    BodyPart: BodyPartTag,
-    EventSource,
+    single: Selector, // e.g. explicit target chosen during play
+    all_enemies,
+    self,
+    body_part: AnatomyTag,
+    event_source,
 };
 pub const Selector = struct {
     id: EntityID,

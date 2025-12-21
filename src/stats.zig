@@ -1,0 +1,51 @@
+pub const Accessor = enum {
+    power,
+    speed,
+    agility,
+    dexterity,
+    fortitude,
+    endurance,
+    acuity,
+    will,
+    intuition,
+    presence,
+};
+
+pub const Template = Block;
+
+pub const Block = packed struct {
+    // physical
+    power: f32,
+    speed: f32,
+    agility: f32,
+    dexterity: f32,
+    fortitude: f32,
+    endurance: f32,
+    // mental
+    acuity: f32,
+    will: f32,
+    intuition: f32,
+    presence: f32,
+
+    pub fn splat(num: f32) Block {
+        return Block{
+            .power = num,
+            .speed = num,
+            .agility = num,
+            .dexterity = num,
+            .fortitude = num,
+            .endurance = num,
+            // mental
+            .acuity = num,
+            .will = num,
+            .intuition = num,
+            .presence = num,
+        };
+    }
+
+    pub fn init(template: Template) Block {
+        const s = Block{};
+        s.* = template;
+        return s;
+    }
+};
