@@ -18,16 +18,18 @@ const SlotMap = slot_map.SlotMap;
 
 pub const Deck = struct {
     alloc: std.mem.Allocator,
-    entities: SlotMap(*Instance),
-    deck: std.ArrayList(*Instance),
-    hand: std.ArrayList(*Instance),
-    exhaust: std.ArrayList(*Instance),
+    entities: SlotMap(*Instance),   // EntityID provider
+    deck: std.ArrayList(*Instance), // all cards 
+    draw: std.ArrayList(*Instance), // draw pile
+    hand: std.ArrayList(*Instance), // (player) hand
+    exhaust: std.ArrayList(*Instance), // exhausted cards
 
     pub fn init(alloc: std.mem.Allocator, templates: []const Template) !@This() {
         var self = @This(){
             .alloc = alloc,
             .entities = try SlotMap(*Instance).init(alloc),
             .deck = try std.ArrayList(*Instance).initCapacity(alloc, templates.len),
+            .draw = try std.ArrayList(*Instance).initCapacity(alloc, templates.len),
             .hand = try std.ArrayList(*Instance).initCapacity(alloc, templates.len),
             .exhaust = try std.ArrayList(*Instance).initCapacity(alloc, templates.len),
         };
@@ -47,6 +49,7 @@ pub const Deck = struct {
         }
         self.entities.deinit();
         self.deck.deinit(self.alloc);
+        self.draw.deinit(self.alloc);
         self.hand.deinit(self.alloc);
         self.exhaust.deinit(self.alloc);
     }
