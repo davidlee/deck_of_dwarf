@@ -29,9 +29,19 @@ const GameState = enum {
 };
 
 pub const Encounter = struct {
-    mobs: []Mob,
-    // environment
-    // loot
+    enemies: std.ArrayList(Mob),
+    //  
+    // environment ... 
+    // loot ...
+    // 
+    fn init(alloc: std.mem.Allocator) !Encounter {
+        return Encounter {
+            .enemies = try std.ArrayList(Mob).initCapacity(alloc, 5),
+        };
+    }
+    fn deinit(self: *Encounter, alloc: std.mem.Allocator) void {
+        self.enemies.deinit(alloc); 
+    }
 };
 
 pub const World = struct {
@@ -56,7 +66,7 @@ pub const World = struct {
             .events = try EventSystem.init(alloc),
             .encounter = null,
             .random = random.RandomStreamDict.init(),
-            .player = Player.init(),
+            .player = try Player.init(alloc),
             .fsm = fsm,
             .deck = try Deck.init(alloc, &BeginnerDeck),
         };
@@ -65,6 +75,8 @@ pub const World = struct {
     pub fn deinit(self: *World) void {
         self.events.deinit();
         self.deck.deinit();
+        self.player.deinit();
+        if(self.encounter) |*encounter| encounter.deinit(self.alloc);
     }
 
     pub fn step(self: *World) void {

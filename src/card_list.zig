@@ -49,6 +49,10 @@ const TechniqueRepository = struct {
     }
 };
 
+pub const Techniques: TechniqueRepository = &.{
+    .entries = TechniqueEntries,
+};
+
 const TechniqueEntries = [_]Technique{
     defineTechnique(.{ .name = "thrust", .damage = .{
         .instances = &.{
@@ -94,6 +98,7 @@ const TechniqueEntries = [_]Technique{
         .counter_mult = 1.0,
         .parry_mult = 1.0,
     }),
+
     defineTechnique(.{
         .name = "parry",
         .damage = .{
@@ -109,6 +114,7 @@ const TechniqueEntries = [_]Technique{
         .counter_mult = 1.0,
         .parry_mult = 1.0,
     }),
+    
     defineTechnique(.{
         .name = "block",
         .damage = .{
@@ -124,10 +130,6 @@ const TechniqueEntries = [_]Technique{
         .counter_mult = 1.0,
         .parry_mult = 1.0,
     }),
-};
-
-pub const Techniques: TechniqueRepository = &.{
-    .entries = TechniqueEntries,
 };
 
 // -----------------------------------------------------------------------------

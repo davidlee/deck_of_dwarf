@@ -12,6 +12,8 @@ const gfx = @import("graphics.zig");
 const cards = @import("cards.zig");
 const deck= @import("card_list.zig").BeginnerDeck;
 
+const CommandHandler = @import("apply.zig").CommandHandler;
+
 pub fn main() !void {
     defer s.shutdown();
 
@@ -101,8 +103,12 @@ fn runTestCase(alloc: std.mem.Allocator, world: *World) !void {
     _=alloc;
     //std.debug.print("deck: {any}\n",.{world.deck.deck});
     for(world.deck.deck.items) |instance| {
-        std.debug.print("inst: {any}\n",.{instance.template.name});
+        std.debug.print("inst: {s}\n",.{instance.template.name});
     }
+    var h = CommandHandler.init(world);
+    const card = world.deck.deck.items[0];
+    const result = try h.playCard(card);
+    std.debug.print("\nresult: {any} ",.{result});
     
     
 }

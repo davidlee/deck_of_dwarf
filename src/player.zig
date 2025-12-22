@@ -1,11 +1,10 @@
 const std = @import("std");
 const lib = @import("infra");
 const stats = @import("stats.zig");
-const config = lib.config;
-const rect = lib.sdl.rect;
-const fsm = lib.fsm;
+const cards = @import("cards.zig");
 
 const body = @import("body.zig");
+const damage = @import("damage.zig");
 
 pub const Archetype = .{
     .soldier = stats.Template{
@@ -37,11 +36,30 @@ pub const Archetype = .{
 };
 
 pub const Player = struct {
+    alloc: std.mem.Allocator,
     stats: stats.Block,
-    wounds: void,
-    conditions: void,
+    wounds: std.ArrayList(body.Wound),
+    conditions: std.ArrayList(damage.Condition),
+    equipment: std.ArrayList(*const cards.Instance),
 
-    pub fn init() Player {
-        return Player{ .stats = stats.Block.splat(5), .wounds = {}, .conditions = {} };
+    pub fn init(alloc: std.mem.Allocator) !Player {
+        //return Player{ .stats = stats.Block.splat(5), .wounds = {}, .equipment = &.{}, .conditions = {} };
+        return Player.initEmptyWithStats(alloc, stats.Block.splat(5));
+    }
+    
+    fn initEmptyWithStats(alloc: std.mem.Allocator, statBlock: stats.Block) !Player {
+        return Player{
+            .alloc = alloc,
+            .stats = statBlock,
+            .wounds = try std.ArrayList(body.Wound).initCapacity(alloc, 5),
+            .conditions= try std.ArrayList(damage.Condition).initCapacity(alloc, 5),
+            .equipment = try std.ArrayList(*const cards.Instance).initCapacity(alloc, 5),
+        }; 
+    }
+    
+    pub fn deinit(self: *Player) void {
+        self.wounds.deinit(self.alloc);
+        self.conditions.deinit(self.alloc);
+        self.equipment.deinit(self.alloc);
     }
 };

@@ -23,6 +23,7 @@ pub const Deck = struct {
     draw: std.ArrayList(*Instance), // draw pile
     hand: std.ArrayList(*Instance), // (player) hand
     exhaust: std.ArrayList(*Instance), // exhausted cards
+    techniques: std.StringHashMap(*const cards.Technique),
 
     pub fn init(alloc: std.mem.Allocator, templates: []const Template) !@This() {
         var self = @This(){
@@ -32,12 +33,27 @@ pub const Deck = struct {
             .draw = try std.ArrayList(*Instance).initCapacity(alloc, templates.len),
             .hand = try std.ArrayList(*Instance).initCapacity(alloc, templates.len),
             .exhaust = try std.ArrayList(*Instance).initCapacity(alloc, templates.len),
+            .techniques = std.StringHashMap(*const cards.Technique).init(alloc),
         };
         // NOTE: this *t is important because we need a stable reference to the static template - using t in the 
         // for loop and then taking a pointer will yield a copy!
         for (templates) |*t| {
-            const instance = try self.createInstance(t);
-            try self.deck.append(alloc, instance);
+            for (t.rules) |rule| {
+                for (rule.expressions) |expr| {
+                    switch(expr.effect) {
+                        .combat_technique => |value| {
+                           if(self.techniques.get(value.name) == null) {
+                               try self.techniques.put(value.name, &value);
+                           }
+                        },
+                        else => {},
+                    }
+                }
+            }
+            // TODO: weight these by some kind of ... weight ... and randomize creation of instances for starter deck
+            for (0..3) |_| {
+                try self.deck.append(alloc, try self.createInstance(t));
+            }
         }
         return self;
     }
@@ -52,6 +68,7 @@ pub const Deck = struct {
         self.draw.deinit(self.alloc);
         self.hand.deinit(self.alloc);
         self.exhaust.deinit(self.alloc);
+        self.techniques.deinit();
     }
 
     fn createInstance(self: *Deck, template: *const Template) !*Instance {
