@@ -1,18 +1,20 @@
 const std = @import("std");
 const lib = @import("infra");
-const Event = @import("events.zig").Event;
-const EventTag = std.meta.Tag(Event);
 
-const EntityID = @import("entity.zig").EntityID;
 const damage = @import("damage.zig");
 const stats = @import("stats.zig");
-const World = @import("world.zig").World;
-const Player = @import("player.zig").Player;
 const cards = @import("cards.zig");
 const card_list = @import("card_list.zig");
 const mob = @import("mob.zig");
-const Mob = mob.Mob;
+const events = @import("events.zig");
 
+const Event = events.Event;
+const EventSystem = events.EventSystem;
+const EventTag = std.meta.Tag(Event);
+const EntityID = @import("entity.zig").EntityID;
+const World = @import("world.zig").World;
+const Player = @import("player.zig").Player;
+const Mob = mob.Mob;
 const Rule = cards.Rule;
 const TagSet = cards.TagSet;
 const Cost = cards.Cost;
@@ -70,27 +72,80 @@ const TechniqueContext = struct {
     calc_difficulty: ?f32 = null,
 };
 
-// const TechniqueWithModifiers = struct {
-//     technique: *const cards.Technique,
-//     scaled_damage: []damage.Instance,
-// };
-
-pub const CommandHandler = struct {
+pub const EventProcessor = struct {
     world: *World,
-
-    pub fn init(world: *World) @This() {
-        return @This(){
+    pub fn init(world: *World) EventProcessor {
+        return EventProcessor{
             .world = world,
         };
     }
 
-    pub fn playCard(self: *CommandHandler, card: *cards.Instance) !bool {
+    pub fn dispatchEvent(self: *EventProcessor, event_system: *EventSystem) !bool {
+        _ = self;
+        const result = event_system.pop();
+        if (result) |event| {
+            switch (event) {
+                .played_action_card => |data| {
+                    std.debug.print("--> action card: {}\n", .{data});
+                },
+                else => |data| std.debug.print("other {}\n", .{data}),
+            }
+            return true;
+        } else return false;
+    }
+};
+
+pub const CommandHandler = struct {
+    world: *World,
+
+    pub fn init(world: *World) CommandHandler {
+        return CommandHandler{
+            .world = world,
+        };
+    }
+
+    pub fn playActionCard(self: *CommandHandler, card: *cards.Instance) !void {
+        const player = &self.world.player;
+        const game_state = self.world.fsm.currentState();
+        var event_system = &self.world.events;
+
+        // check if it's valid to play
+        // first, game and template requirements
+        if (game_state != .wait_for_player)
+            return CommandError.InvalidGameState;
+
+        if (player.stamina < card.template.cost.stamina)
+            return CommandError.InsufficientStamina;
+
+        // WARN: for now we assume the trigger is fine (caller's responsibility)
+        // TODO: check other shared criteria - time remaining in round, etc
+        //
+        // TODO: check that the card is in the player's hand
+
+        // if all rules have valid predicates, the card is valid to play;
+        for (card.template.rules) |rule| {
+            switch (rule.valid) {
+                .always => {},
+                else => return error.CommandInvalid,
+            }
+        }
+
+        // sink an event for the card
+        try event_system.push(Event{
+            .played_action_card = .{
+                .instance = card.id,
+                .template = card.template.id,
+            },
+        });
+    }
+
+    pub fn playCardFull(self: *CommandHandler, card: *cards.Instance) !bool {
         const alloc = self.world.alloc;
         const encounter = &self.world.encounter.?;
         const player = &self.world.player;
         const game_state = self.world.fsm.currentState();
         const techniques = self.world.deck.techniques;
-        const events = self.world.events;
+        const event_system = self.world.events;
 
         var ecs = try std.ArrayList(EffectContext).initCapacity(alloc, 5);
 
@@ -106,7 +161,7 @@ pub const CommandHandler = struct {
         // TODO: check other shared criteria
         // - time remaining in round
 
-        // now check each rule's valid predicate
+        // if all rules have valid predicates, the card is valid to play;
         for (card.template.rules) |rule| {
             switch (rule.valid) {
                 .always => {},
@@ -178,10 +233,10 @@ pub const CommandHandler = struct {
             }
 
             // : sink an event for the card
-            try events.push(Event{
+            try event_system.push(Event{
                 .played_card = .{ .instance = card.id, .template = card.template.id },
             });
-            for (ecs.items) |ec| {}
+            // for (ecs.items) |ec| {}
 
             // : sink an event for each effect
             // : apply costs / sink more events

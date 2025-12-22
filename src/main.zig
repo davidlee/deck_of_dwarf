@@ -10,7 +10,7 @@ const World = @import("world.zig").World;
 const ctrl = @import("controls.zig");
 const gfx = @import("graphics.zig");
 const cards = @import("cards.zig");
-const deck= @import("card_list.zig").BeginnerDeck;
+const deck = @import("card_list.zig").BeginnerDeck;
 
 const CommandHandler = @import("apply.zig").CommandHandler;
 
@@ -51,8 +51,9 @@ pub fn main() !void {
     // Useful for limiting the FPS and getting the delta time.
     var fps_capper = s.extras.FramerateCapper(f32){ .mode = .{ .limited = config.fps } };
 
-    try runTestCase(alloc, &world);
-    
+    try runTestCase(world);
+    std.process.exit(0);
+
     var quit = false;
     while (!quit) {
         // Delay to limit the FPS, returned delta time not needed.
@@ -63,20 +64,20 @@ pub fn main() !void {
 
         // Render it
         try gfx.render(
-            &world,
+            world,
             &renderer,
         );
 
-        // Event logic.
-        // TODO: experiment with user-defined events here vs src/events.zig
-        // for decoupling LogicWorld & RenderWorld
+        // swap event streams
+        world.events.swap_buffers();
 
+        // SDL Event handlers
         while (s.events.poll()) |event|
             switch (event) {
                 .quit => quit = true,
                 .terminating => quit = true,
                 .key_down => {
-                    quit = ctrl.keypress(event.key_down.key.?, &world);
+                    quit = ctrl.keypress(event.key_down.key.?, world);
                 },
                 .mouse_motion => {
                     ui.mouse = s.rect.FPoint{ .x = event.mouse_motion.x, .y = event.mouse_motion.y };
@@ -99,16 +100,16 @@ pub fn main() !void {
     }
 }
 
-fn runTestCase(alloc: std.mem.Allocator, world: *World) !void {
-    _=alloc;
+fn runTestCase(world: *World) !void {
     //std.debug.print("deck: {any}\n",.{world.deck.deck});
-    for(world.deck.deck.items) |instance| {
-        std.debug.print("inst: {s}\n",.{instance.template.name});
+    for (world.deck.deck.items) |instance| {
+        std.debug.print("inst: {s}\n", .{instance.template.name});
     }
-    var h = CommandHandler.init(world);
+
     const card = world.deck.deck.items[0];
-    const result = try h.playCard(card);
-    std.debug.print("\nresult: {any} ",.{result});
-    
-    
+    try world.commandHandler.playActionCard(card);
+
+    world.events.swap_buffers();
+    world.step(); // let's see that event;
+    std.process.exit(0);
 }

@@ -23,7 +23,7 @@ pub const Event = union(enum) {
     entity_died: u32, // Payload: just the ID
     mob_died: EntityID,
 
-    played_card: struct { 
+    played_action_card: struct {
         instance: EntityID,
         template: u64,
     },
@@ -68,6 +68,18 @@ pub const EventSystem = struct {
         self.current_events.deinit(self.alloc);
         self.next_events.deinit(self.alloc);
         self.logger.deinit();
+    }
+
+    fn log(self: *EventSystem, label: []const u8) void {
+        std.debug.print("events({}):  next: {} -- current: {} \n", .{
+            label,
+            self.next_events.items.len,
+            self.current_events.items.len,
+        });
+    }
+
+    pub fn pop(self: *EventSystem) ?Event {
+        return self.current_events.pop();
     }
 
     // Systems call this to queue something for NEXT frame
