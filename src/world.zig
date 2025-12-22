@@ -18,17 +18,17 @@ const Deck = @import("deck.zig").Deck;
 const Player = player.Player;
 const BeginnerDeck = card_list.BeginnerDeck;
 
-const GameEvent = enum {
+pub const GameEvent = enum {
     start_game,
-    end_player_turn,
-    begin_animation,
+    end_player_card_selection,
+    end_player_reaction,
     end_animation,
 };
 
-const GameState = enum {
+pub const GameState = enum {
     menu,
-    wait_for_player,
-    wait_for_ai,
+    player_card_selection,
+    player_reaction,
     animating,
 };
 
@@ -61,18 +61,20 @@ pub const World = struct {
     encounter: ?Encounter,
     random: random.RandomStreamDict,
     player: Player,
-    fsm: zigfsm.StateMachine(GameState, GameEvent, .wait_for_player),
+    fsm: zigfsm.StateMachine(GameState, GameEvent, .player_card_selection),
     deck: Deck,
     commandHandler: CommandHandler,
     eventProcessor: EventProcessor,
 
     pub fn init(alloc: std.mem.Allocator) !*World {
-        var fsm = zigfsm.StateMachine(GameState, GameEvent, .wait_for_player).init();
+        const FSM = zigfsm.StateMachine(GameState, GameEvent, .player_card_selection);
 
-        try fsm.addEventAndTransition(.start_game, .menu, .wait_for_player);
-        try fsm.addEventAndTransition(.end_player_turn, .wait_for_player, .wait_for_ai);
-        try fsm.addEventAndTransition(.begin_animation, .wait_for_ai, .animating);
-        try fsm.addEventAndTransition(.end_animation, .animating, .wait_for_player);
+        var fsm = FSM.init();
+
+        try fsm.addEventAndTransition(.start_game, .menu, .player_card_selection);
+        try fsm.addEventAndTransition(.end_player_card_selection, .player_card_selection, .player_reaction);
+        try fsm.addEventAndTransition(.end_player_reaction, .player_reaction, .animating);
+        try fsm.addEventAndTransition(.end_animation, .animating, .player_card_selection);
 
         const self = try alloc.create(World);
         self.* = .{

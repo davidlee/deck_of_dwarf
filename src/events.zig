@@ -4,6 +4,7 @@ const RandomStreamID = @import("random.zig").RandomStreamID;
 const Slot = void; // TODO what's this look like?
 const deck = @import("deck.zig");
 const cards = @import("cards.zig");
+const world= @import("world.zig");
 const Zone = cards.Zone;
 pub const CardWithSlot = struct {
     card: EntityID,
@@ -27,6 +28,9 @@ pub const Event = union(enum) {
 
     played_action_card: struct { instance: EntityID, template: u64 },
     card_moved: struct { instance: EntityID, from: Zone, to: Zone },
+
+    game_state_transitioned_to: world.GameState,
+
     played_reaction: CardWithEvent,
 
     equipped_item: CardWithSlot,

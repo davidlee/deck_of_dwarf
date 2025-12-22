@@ -111,5 +111,15 @@ fn runTestCase(world: *World) !void {
 
     world.events.swap_buffers();
     try world.step(); // let's see that event;
+
+    std.debug.print("current_state: {}\n", .{world.fsm.currentState()});
+
+    try world.commandHandler.gameStateTransition(.player_reaction);
+    world.events.swap_buffers();
+
+    try world.step();
+
+    std.debug.print("current_state: {}\n", .{world.fsm.currentState()});
+
     std.process.exit(0);
 }

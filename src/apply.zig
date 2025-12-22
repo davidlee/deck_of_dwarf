@@ -12,7 +12,8 @@ const Event = events.Event;
 const EventSystem = events.EventSystem;
 const EventTag = std.meta.Tag(Event);
 const EntityID = @import("entity.zig").EntityID;
-const World = @import("world.zig").World;
+const world = @import("world.zig");
+const World = world.World;
 const Player = @import("player.zig").Player;
 const Mob = mob.Mob;
 const Rule = cards.Rule;
@@ -75,13 +76,16 @@ const TechniqueContext = struct {
 
 pub const EventProcessor = struct {
     world: *World,
-    pub fn init(world: *World) EventProcessor {
+    pub fn init(ctx: *World) EventProcessor {
         return EventProcessor{
-            .world = world,
+            .world = ctx,
         };
     }
 
     pub fn dispatchEvent(self: *EventProcessor, event_system: *EventSystem) !bool {
+        const e = Event{ .game_state_transitioned_to = .animating };
+        _ = e;
+
         const result = event_system.pop();
         if (result) |event| {
             std.debug.print("--> dispatchEvent: {}\n", .{event});
@@ -100,10 +104,18 @@ pub const EventProcessor = struct {
 pub const CommandHandler = struct {
     world: *World,
 
-    pub fn init(world: *World) CommandHandler {
+    pub fn init(ctx: *World) CommandHandler {
         return CommandHandler{
-            .world = world,
+            .world = ctx,
         };
+    }
+
+    pub fn gameStateTransition(self: *CommandHandler, target_state: world.GameState) !void {
+        if (self.world.fsm.canTransitionTo(target_state)) {
+            try self.world.events.push(Event{ .game_state_transitioned_to = target_state });
+        } else {
+            return CommandError.InvalidGameState;
+        }
     }
 
     pub fn playActionCard(self: *CommandHandler, card: *cards.Instance) !void {
@@ -113,7 +125,7 @@ pub const CommandHandler = struct {
 
         // check if it's valid to play
         // first, game and template requirements
-        if (game_state != .wait_for_player)
+        if (game_state != .player_card_selection)
             return CommandError.InvalidGameState;
 
         if (player.stamina < card.template.cost.stamina)
