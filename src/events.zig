@@ -2,7 +2,9 @@ const std = @import("std");
 const EntityID = @import("entity.zig").EntityID;
 const RandomStreamID = @import("random.zig").RandomStreamID;
 const Slot = void; // TODO what's this look like?
-//
+const deck = @import("deck.zig");
+const cards = @import("cards.zig");
+const Zone = cards.Zone;
 pub const CardWithSlot = struct {
     card: EntityID,
     slot: Slot,
@@ -23,11 +25,8 @@ pub const Event = union(enum) {
     entity_died: u32, // Payload: just the ID
     mob_died: EntityID,
 
-    played_action_card: struct {
-        instance: EntityID,
-        template: u64,
-    },
-    played_action: EntityID,
+    played_action_card: struct { instance: EntityID, template: u64 },
+    card_moved: struct { instance: EntityID, from: Zone, to: Zone },
     played_reaction: CardWithEvent,
 
     equipped_item: CardWithSlot,
@@ -70,12 +69,17 @@ pub const EventSystem = struct {
         self.logger.deinit();
     }
 
-    fn log(self: *EventSystem, label: []const u8) void {
-        std.debug.print("events({}):  next: {} -- current: {} \n", .{
+    fn logQueueSize(self: *EventSystem, label: []const u8) void {
+        std.debug.print("events::{s} ->  next: {d} -- current: {d} \n", .{
             label,
             self.next_events.items.len,
             self.current_events.items.len,
         });
+    }
+
+    fn logEvent(self: *EventSystem, label: []const u8, event: *const Event) void {
+        _ = self;
+        std.debug.print("events::{s} ->  event: {any}\n", .{ label, event });
     }
 
     pub fn pop(self: *EventSystem) ?Event {
@@ -84,6 +88,7 @@ pub const EventSystem = struct {
 
     // Systems call this to queue something for NEXT frame
     pub fn push(self: *EventSystem, event: Event) !void {
+        self.logEvent("push", &event);
         try self.next_events.append(self.alloc, event);
     }
 

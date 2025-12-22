@@ -27,6 +27,7 @@ pub const CommandError = error{
     CommandInvalid,
     InsufficientStamina,
     InvalidGameState,
+    CardNotInHand,
     // InsufficientTime,
     NotImplemented,
 };
@@ -81,12 +82,13 @@ pub const EventProcessor = struct {
     }
 
     pub fn dispatchEvent(self: *EventProcessor, event_system: *EventSystem) !bool {
-        _ = self;
         const result = event_system.pop();
         if (result) |event| {
+            std.debug.print("--> dispatchEvent: {}\n", .{event});
             switch (event) {
                 .played_action_card => |data| {
-                    std.debug.print("--> action card: {}\n", .{data});
+                    try self.world.deck.move(data.instance, .hand, .in_play);
+                    try event_system.push(Event{ .card_moved = .{ .instance = data.instance, .from = .hand, .to = .in_play } });
                 },
                 else => |data| std.debug.print("other {}\n", .{data}),
             }
@@ -117,10 +119,13 @@ pub const CommandHandler = struct {
         if (player.stamina < card.template.cost.stamina)
             return CommandError.InsufficientStamina;
 
+        if (!self.world.deck.instanceInZone(card.id, .hand)) return CommandError.CardNotInHand;
+
         // WARN: for now we assume the trigger is fine (caller's responsibility)
         // TODO: check other shared criteria - time remaining in round, etc
         //
         // TODO: check that the card is in the player's hand
+        //
 
         // if all rules have valid predicates, the card is valid to play;
         for (card.template.rules) |rule| {

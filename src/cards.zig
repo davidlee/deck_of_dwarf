@@ -37,9 +37,10 @@ pub const Zone = enum {
     in_play,
     equipped,
     inventory,
-    active_passives,
-    active_meta,
-    active_reactions,
+    exhaust,
+    // active_passives,
+    // active_meta,
+    // active_reactions,
 };
 
 pub const Trigger = union(enum) {

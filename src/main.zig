@@ -60,7 +60,7 @@ pub fn main() !void {
         _ = fps_capper.delay();
 
         // Update logic.
-        world.step();
+        try world.step();
 
         // Render it
         try gfx.render(
@@ -110,6 +110,6 @@ fn runTestCase(world: *World) !void {
     try world.commandHandler.playActionCard(card);
 
     world.events.swap_buffers();
-    world.step(); // let's see that event;
+    try world.step(); // let's see that event;
     std.process.exit(0);
 }

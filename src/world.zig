@@ -99,7 +99,7 @@ pub const World = struct {
         self.alloc.destroy(self);
     }
 
-    pub fn step(self: *World) void {
+    pub fn step(self: *World) !void {
         while (try self.eventProcessor.dispatchEvent(&self.events)) {
             // std.debug.print("processed events:\n", .{});
         }
