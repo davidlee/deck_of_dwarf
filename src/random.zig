@@ -16,7 +16,7 @@ pub const Stream = struct {
         return Stream{
             .seed = seed,
             .prng = prng,
-        };
+        }; 
     }
 
     pub fn random(self: *Stream) std.Random {
@@ -46,12 +46,12 @@ pub const RandomStreamDict = struct {
         };
     }
 
-    fn get(self: *RandomStreamDict, id: RandomStreamID) Stream {
+    fn get(self: *RandomStreamDict, id: RandomStreamID) *Stream {
         return switch (id) {
-            RandomStreamID.combat => self.combat,
-            RandomStreamID.deck_builder => self.deck_builder,
-            RandomStreamID.shuffler => self.shuffler,
-            RandomStreamID.effects => self.effects,
+            RandomStreamID.combat => &self.combat,
+            RandomStreamID.deck_builder => &self.deck_builder,
+            RandomStreamID.shuffler => &self.shuffler,
+            RandomStreamID.effects => &self.effects,
         };
     }
 };

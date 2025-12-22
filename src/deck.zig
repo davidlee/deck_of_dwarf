@@ -25,7 +25,6 @@ const DeckError = error{
 pub const Deck = struct {
     alloc: std.mem.Allocator,
     entities: SlotMap(*Instance), // EntityID provider
-    deck: std.ArrayList(*Instance), // all cards
     draw: std.ArrayList(*Instance), // draw pile
     hand: std.ArrayList(*Instance), // (player) hand
     discard: std.ArrayList(*Instance), // (player) hand
@@ -76,8 +75,6 @@ pub const Deck = struct {
         var self = @This(){
             .alloc = alloc,
             .entities = try SlotMap(*Instance).init(alloc),
-
-            .deck = try std.ArrayList(*Instance).initCapacity(alloc, 20),
             .draw = try std.ArrayList(*Instance).initCapacity(alloc, 20),
             .hand = try std.ArrayList(*Instance).initCapacity(alloc, 10),
             .discard = try std.ArrayList(*Instance).initCapacity(alloc, 10),
@@ -108,7 +105,7 @@ pub const Deck = struct {
             // TODO: add weighting & randomisation for building initial deck
             for (0..5) |_| {
                 const instance = try self.createInstance(t);
-                try self.deck.append(alloc, instance);
+                // try self.deck.append(alloc, instance);
                 if (i < 5) {
                     try self.hand.append(alloc, instance);
                     std.debug.print("->hand: {s}\n", .{instance.template.name});
@@ -121,13 +118,16 @@ pub const Deck = struct {
         return self;
     }
 
+    pub fn allInstances(self: *Deck) []*Instance {
+        return self.entities.items.items;
+    }
+
     pub fn deinit(self: *Deck) void {
         // Free all allocated instances
         for (self.entities.items.items) |instance| {
             self.alloc.destroy(instance);
         }
         self.entities.deinit();
-        self.deck.deinit(self.alloc);
         self.draw.deinit(self.alloc);
         self.hand.deinit(self.alloc);
         self.discard.deinit(self.alloc);
@@ -145,6 +145,5 @@ pub const Deck = struct {
     pub fn instanceInZone(self: *Deck, id: EntityID, zone: Zone) bool {
         _ = Deck.find(id, self.pileForZone(zone)) catch return false;
         return true;
-        // try self.moveInternal(id, self.pileForZone(from), self.pileForZone(to));
     }
 };

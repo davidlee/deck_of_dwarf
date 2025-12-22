@@ -85,10 +85,15 @@ pub const World = struct {
             .player = try Player.init(alloc),
             .fsm = fsm,
             .deck = try Deck.init(alloc, &BeginnerDeck),
-            .eventProcessor = EventProcessor.init(self),
-            .commandHandler = CommandHandler.init(self),
+            .eventProcessor = undefined,
+            .commandHandler = undefined,
         };
         return self;
+    }
+
+    pub fn attachEventHandlers(self: *World) void {
+        self.eventProcessor = EventProcessor.init(self);
+        self.commandHandler = CommandHandler.init(self);
     }
 
     pub fn deinit(self: *World) void {

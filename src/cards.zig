@@ -104,7 +104,7 @@ pub const Predicate = union(enum) {
     // wounds ...
     // weapon ...
     has_tag: TagSet, // bitmask with one bit set
-    not: *Predicate,
+    not: *const Predicate,
     all: []const Predicate,
     any: []const Predicate,
 };

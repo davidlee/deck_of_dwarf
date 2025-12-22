@@ -33,6 +33,7 @@ pub fn main() !void {
     var ui = gfx.UIState.init();
 
     var world = try World.init(alloc);
+    world.attachEventHandlers();
     defer {
         world.deinit();
     }
@@ -101,12 +102,12 @@ pub fn main() !void {
 }
 
 fn runTestCase(world: *World) !void {
-    //std.debug.print("deck: {any}\n",.{world.deck.deck});
-    for (world.deck.deck.items) |instance| {
-        std.debug.print("inst: {s}\n", .{instance.template.name});
-    }
+    for (world.deck.allInstances()) |c|
+        std.debug.print("deck: {any}\n", .{c});
 
-    const card = world.deck.deck.items[0];
+
+
+    const card = world.deck.hand.items[0];
     try world.commandHandler.playActionCard(card);
 
     world.events.swap_buffers();
