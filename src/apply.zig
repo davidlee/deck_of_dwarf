@@ -14,8 +14,7 @@ const Event = events.Event;
 const EventSystem = events.EventSystem;
 const EventTag = std.meta.Tag(Event);
 const World = world.World;
-const Player = @import("player.zig").Player;
-const Mob = combat.Mob;
+const Agent = combat.Agent;
 const Rule = cards.Rule;
 const TagSet = cards.TagSet;
 const Cost = cards.Cost;
@@ -38,8 +37,8 @@ pub const CommandError = error{
 const EffectContext = struct {
     card: *cards.Instance,
     effect: *const cards.Effect,
-    target: *std.ArrayList(*Mob), // TODO: will need to be polymorphic (player, body part)
-    actor: *Player,
+    target: *std.ArrayList(*combat.Agent), // TODO: will need to be polymorphic (player, body part)
+    actor: *combat.Agent,
     technique: ?TechniqueContext = null,
 
     fn applyModifiers(self: *EffectContext, alloc: std.mem.Allocator) void {
@@ -92,7 +91,7 @@ pub const EventProcessor = struct {
                 .game_state_transitioned_to => |state| {
                     std.debug.print("\n game state ==> {}\n", .{state});
                     for (self.world.encounter.?.enemies.items) |mob| {
-                        for (mob.in_play.items) |instance| {
+                        for (mob.cards.deck.in_play.items) |instance| {
                             log("cards in play (mob): {s}\n", .{instance.template.name});
                         }
                     }
@@ -130,6 +129,7 @@ pub const CommandHandler = struct {
         const player = &self.world.player;
         const game_state = self.world.fsm.currentState();
         var event_system = &self.world.events;
+        var pd = player.cards.deck;
 
         // check if it's valid to play
         // first, game and template requirements
@@ -142,7 +142,7 @@ pub const CommandHandler = struct {
         if (player.time_available < card.template.cost.time)
             return CommandError.InsufficientTime;
 
-        if (!self.world.deck.instanceInZone(card.id, .hand)) return CommandError.CardNotInHand;
+        if (!pd.instanceInZone(card.id, .hand)) return CommandError.CardNotInHand;
 
         // WARN: for now we assume the trigger is fine (caller's responsibility)
 
@@ -155,7 +155,7 @@ pub const CommandHandler = struct {
         }
 
         // lock it in: move the card
-        try self.world.deck.move(card.id, .hand, .in_play);
+        try pd.move(card.id, .hand, .in_play);
         try event_system.push(
             Event{
                 .card_moved = .{ .instance = card.id, .from = .hand, .to = .in_play },
@@ -292,7 +292,7 @@ pub const CommandHandler = struct {
 //     }
 // };
 
-fn evaluatePredicate(p: *const cards.Predicate, card: *const cards.Instance, actor: *Player, target: *Mob) bool {
+fn evaluatePredicate(p: *const cards.Predicate, card: *const cards.Instance, actor: *Agent, target: *Agent) bool {
     return switch (p.*) {
         .always => true,
         .has_tag => |tag| card.template.tags.hasTag(tag),

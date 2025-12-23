@@ -3,27 +3,27 @@ const lib = @import("infra");
 const PartTag = @import("body.zig").PartTag;
 const Scaling = @import("stats.zig").Scaling;
 
-const Immunity = union(enum) {
+pub const Immunity = union(enum) {
     condition: Condition,
     damage: Kind,
     // dot_effect
     // magic / etc
 };
 
-const Resistance = struct {
+pub const Resistance = struct {
     damage: Kind,
 
     threshold: f32, // no damage below this number
     ratio: f32, // multiplier for remainder
 };
 
-const Vulnerability = struct {
+pub const Vulnerability = struct {
     damage: Kind,
     ratio: f32,
     // maybe: threshold -> trigger (DoT / Effect / Special ..)
 };
 
-const Susceptibility = struct {
+pub const Susceptibility = struct {
     condition: Condition,
     // trigger: null, // TODO:
 };

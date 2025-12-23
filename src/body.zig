@@ -126,6 +126,14 @@ pub const Body = struct {
         _ = .{ self, parent };
         // TODO: implement
     }
+    pub fn init(alloc: std.mem.Allocator) !Body {
+        return Body{
+            .parts = try std.ArrayList(Part).initCapacity(alloc, 100),
+        };
+    }
+    pub fn deinit(self: *Body, alloc: std.mem.Allocator) void {
+        self.parts.deinit(alloc);
+    }
 };
 
 pub const Wound = struct {

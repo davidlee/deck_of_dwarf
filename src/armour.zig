@@ -68,4 +68,4 @@ const Construction = struct {
 };
 
 // all armour as worn, with precomputed values
-const Stack = struct {};
+pub const Stack = struct {};

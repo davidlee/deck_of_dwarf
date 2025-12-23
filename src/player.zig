@@ -2,6 +2,7 @@ const std = @import("std");
 const lib = @import("infra");
 const stats = @import("stats.zig");
 const cards = @import("cards.zig");
+const deck = @import("deck.zig");
 
 const body = @import("body.zig");
 const damage = @import("damage.zig");
@@ -36,38 +37,47 @@ pub const Archetype = .{
     },
 };
 
-pub const Player = struct {
+pub fn newPlayer(
     alloc: std.mem.Allocator,
-    stats: stats.Block,
-    wounds: std.ArrayList(body.Wound),
-    conditions: std.ArrayList(damage.Condition),
-    equipment: std.ArrayList(*const cards.Instance),
-    stamina: f32,
-    stamina_available: f32,
-    time_available: f32 = 1.0,
-    state: combat.State,
+    playerDeck: deck.Deck,
+    sb: stats.Block,
+    bd: body.Body,
+) !combat.Agent {
+    return try combat.Agent.init(alloc, .player, combat.Strat{.deck = playerDeck}, sb, bd, 10.0);
+}
 
-    pub fn init(alloc: std.mem.Allocator) !Player {
-        //return Player{ .stats = stats.Block.splat(5), .wounds = {}, .equipment = &.{}, .conditions = {} };
-        return Player.initEmptyWithStats(alloc, stats.Block.splat(5));
-    }
-
-    fn initEmptyWithStats(alloc: std.mem.Allocator, statBlock: stats.Block) !Player {
-        return Player{
-            .alloc = alloc,
-            .stats = statBlock,
-            .wounds = try std.ArrayList(body.Wound).initCapacity(alloc, 5),
-            .conditions = try std.ArrayList(damage.Condition).initCapacity(alloc, 5),
-            .equipment = try std.ArrayList(*const cards.Instance).initCapacity(alloc, 5),
-            .stamina = 10,
-            .stamina_available = 10,
-            .state = combat.State{ .balance = 1.0 },
-        };
-    }
-
-    pub fn deinit(self: *Player) void {
-        self.wounds.deinit(self.alloc);
-        self.conditions.deinit(self.alloc);
-        self.equipment.deinit(self.alloc);
-    }
-};
+// pub const Player = struct {
+//     alloc: std.mem.Allocator,
+//     stats: stats.Block,
+//     wounds: std.ArrayList(body.Wound),
+//     conditions: std.ArrayList(damage.Condition),
+//     equipment: std.ArrayList(*const cards.Instance),
+//     stamina: f32,
+//     stamina_available: f32,
+//     time_available: f32 = 1.0,
+//     state: combat.State,
+//
+//     pub fn init(alloc: std.mem.Allocator) !Player {
+//         //return Player{ .stats = stats.Block.splat(5), .wounds = {}, .equipment = &.{}, .conditions = {} };
+//         return Player.initEmptyWithStats(alloc, stats.Block.splat(5));
+//     }
+//
+//     fn initEmptyWithStats(alloc: std.mem.Allocator, statBlock: stats.Block) !Player {
+//         return Player{
+//             .alloc = alloc,
+//             .stats = statBlock,
+//             .wounds = try std.ArrayList(body.Wound).initCapacity(alloc, 5),
+//             .conditions = try std.ArrayList(damage.Condition).initCapacity(alloc, 5),
+//             .equipment = try std.ArrayList(*const cards.Instance).initCapacity(alloc, 5),
+//             .stamina = 10,
+//             .stamina_available = 10,
+//             .state = combat.State{ .balance = 1.0 },
+//         };
+//     }
+//
+//     pub fn deinit(self: *Player) void {
+//         self.wounds.deinit(self.alloc);
+//         self.conditions.deinit(self.alloc);
+//         self.equipment.deinit(self.alloc);
+//     }
+// };

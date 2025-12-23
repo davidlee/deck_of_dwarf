@@ -7,16 +7,16 @@ const events = @import("events.zig");
 const apply = @import("apply.zig");
 const cards = @import("cards.zig");
 const card_list = @import("card_list.zig");
+const stats = @import("stats.zig");
+const combat = @import("combat.zig");
+const body = @import("body.zig");
 
 const EventSystem = events.EventSystem;
 const CommandHandler = apply.CommandHandler;
 const EventProcessor = apply.EventProcessor;
 const Event = events.Event;
 const SlotMap = @import("slot_map.zig").SlotMap;
-const combat = @import("combat.zig");
-const Mob = combat.Mob;
 const Deck = @import("deck.zig").Deck;
-const Player = player.Player;
 const BeginnerDeck = card_list.BeginnerDeck;
 
 pub const GameEvent = enum {
@@ -33,40 +33,14 @@ pub const GameState = enum {
     animating,
 };
 
-pub const Encounter = struct {
-    enemies: std.ArrayList(*Mob),
-    //
-    // environment ...
-    // loot ...
-    //
-    fn init(alloc: std.mem.Allocator) !Encounter {
-        var e = Encounter{
-            .enemies = try std.ArrayList(*Mob).initCapacity(alloc, 5),
-        };
-        const mob = try alloc.create(Mob);
-        mob.* = try Mob.init(alloc);
-
-        try e.enemies.append(alloc, mob);
-        return e;
-    }
-
-    fn deinit(self: *Encounter, alloc: std.mem.Allocator) void {
-        for (self.enemies.items) |nme| {
-            nme.deinit(alloc);
-            // alloc.destroy(nme);
-        }
-        self.enemies.deinit(alloc);
-    }
-};
-
 pub const World = struct {
     alloc: std.mem.Allocator,
     events: EventSystem,
-    encounter: ?Encounter,
+    encounter: ?combat.Encounter,
     random: random.RandomStreamDict,
-    player: Player,
+    player: combat.Agent,
     fsm: zigfsm.StateMachine(GameState, GameEvent, .player_card_selection),
-    deck: Deck,
+    // deck: Deck,
     commandHandler: CommandHandler,
     eventProcessor: EventProcessor,
 
@@ -80,15 +54,19 @@ pub const World = struct {
         try fsm.addEventAndTransition(.end_player_reaction, .player_reaction, .animating);
         try fsm.addEventAndTransition(.end_animation, .animating, .player_card_selection);
 
+        const playerDeck = try Deck.init(alloc, &BeginnerDeck);
+        const playerStats = stats.Block.splat(5);
+        const playerBody = try body.Body.init(alloc);
+
         const self = try alloc.create(World);
         self.* = .{
             .alloc = alloc,
             .events = try EventSystem.init(alloc),
-            .encounter = try Encounter.init(alloc),
+            .encounter = try combat.Encounter.init(alloc),
             .random = random.RandomStreamDict.init(),
-            .player = try Player.init(alloc),
+            .player = try player.newPlayer(alloc, playerDeck, playerStats, playerBody),
             .fsm = fsm,
-            .deck = try Deck.init(alloc, &BeginnerDeck),
+            // .deck = try Deck.init(alloc, &BeginnerDeck),
             .eventProcessor = undefined,
             .commandHandler = undefined,
         };
@@ -102,7 +80,7 @@ pub const World = struct {
 
     pub fn deinit(self: *World) void {
         self.events.deinit();
-        self.deck.deinit();
+        // self.deck.deinit();
         self.player.deinit();
         if (self.encounter) |*encounter| {
             encounter.deinit(self.alloc);

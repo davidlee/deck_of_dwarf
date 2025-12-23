@@ -6,7 +6,10 @@ const random = @import("random.zig");
 const events = @import("events.zig");
 const apply = @import("apply.zig");
 const cards = @import("cards.zig");
+const body = @import("body.zig");
 const card_list = @import("card_list.zig");
+const stats = @import("stats.zig");
+const entity = @import("entity.zig");
 
 const EventSystem = events.EventSystem;
 const CommandHandler = apply.CommandHandler;
@@ -14,9 +17,7 @@ const EventProcessor = apply.EventProcessor;
 const Event = events.Event;
 const SlotMap = @import("slot_map.zig").SlotMap;
 const combat = @import("combat.zig");
-const Mob = combat.Mob;
 const Deck = @import("deck.zig").Deck;
-const Player = player.Player;
 const BeginnerDeck = card_list.BeginnerDeck;
 const World = @import("world.zig").World;
 
@@ -39,30 +40,44 @@ pub fn runTestCase(world: *World) !void {
     // log("\nEncounter: {d}\n", .{world.encounter.?.enemies.items.len});
     // log("\nEnemy: {any}\n", .{world.encounter.?.enemies.items[0]});
 
-    var mob = world.encounter.?.enemies.items[0];
-    const templates: []const cards.Template = &card_list.BeginnerDeck;
+    const mobdeck = try Deck.init(world.alloc, &BeginnerDeck);
 
-    try mob.play(world.alloc, &templates[0]);
-    try mob.play(world.alloc, &templates[0]);
-    try mob.play(world.alloc, &templates[0]);
+    var mob = try combat.Agent.init(
+        world.alloc,
+        .ai,
+        combat.Strat{ .deck = mobdeck },
+        stats.Block.splat(6),
+        try body.Body.init(world.alloc),
+        10.0,
+    );
+
+    try world.encounter.?.enemies.append(world.alloc, &mob);
+
+    // const templates: []const cards.Template = &card_list.BeginnerDeck;
+
+    // mob.cards.deck.deck.items.
+    // try mob.play(world.alloc, &templates[0]);
+    // try mob.play(world.alloc, &templates[0]);
+    // try mob.play(world.alloc, &templates[0]);
 
     try nextFrame(world);
 
     // play a single action card
     //
-    var card = world.deck.hand.items[0];
+    const pd = world.player.cards.deck;
+    var card = pd.hand.items[0];
     try world.commandHandler.playActionCard(card);
     log("player stamina: {d}/{d}\n", .{ world.player.stamina, world.player.stamina_available });
 
     try nextFrame(world);
 
-    card = world.deck.hand.items[0];
+    card = pd.hand.items[0];
     try world.commandHandler.playActionCard(card);
     log("player stamina: {d}/{d}\n", .{ world.player.stamina, world.player.stamina_available });
 
     try nextFrame(world);
 
-    card = world.deck.hand.items[0];
+    card = pd.hand.items[0];
     try world.commandHandler.playActionCard(card);
     log("player stamina: {d}/{d}\n", .{ world.player.stamina, world.player.stamina_available });
 
@@ -74,7 +89,7 @@ pub fn runTestCase(world: *World) !void {
     try nextFrame(world);
 
     try world.commandHandler.gameStateTransition(.player_reaction);
-    for(world.deck.in_play.items) |inst| log("player card: {s}\n",.{inst.template.name});
+    for (world.player.cards.deck.in_play.items) |inst| log("player card: {s}\n", .{inst.template.name});
 
     try nextFrame(world);
 
@@ -87,3 +102,11 @@ fn nextFrame(world: *World) !void {
 
     std.debug.print("tick ... current_state: {}\n", .{world.fsm.currentState()});
 }
+//
+// pub fn play(self: combat.Agent, alloc: std.mem.Allocator, template: *const cards.Template) !void {
+//     var instance = try alloc.create(cards.Instance);
+//     instance.template = template;
+//     const id: entity.ID = try self.slot_map.insert(instance);
+//     instance.id = id;
+//     self.in_play.appendAssumeCapacity(instance);
+// }

@@ -1,3 +1,4 @@
+const std = @import("std");
 pub const Scaling = struct {
     stats: CheckSignature,
     ratio: f32 = 1.0,
@@ -53,11 +54,15 @@ pub const Block = packed struct {
         };
     }
 
-    pub fn init(template: Template) Block {
-        const s = Block{};
-        s.* = template;
-        return s;
-    }
+    // pub fn init(alloc: std.mem.Allocator, template: Template) !Block {
+    //     var s = alloc.create(Block);
+    //     s.* = template;
+    //     return s;
+    // }
+    //
+    // pub fn deinit(self: *Body, alloc: std.mem.Allocator) void {
+    //     alloc.destroy(self);
+    // }
 
     pub fn get(self: *Block, a: Accessor) f32 {
         return switch (a) {
