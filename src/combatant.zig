@@ -1,13 +1,64 @@
 const std = @import("std");
 const body = @import("body.zig");
+const stats = @import("stats.zig");
+const cards = @import("cards.zig");
+
+const EntityID = @import("entity.zig").EntityID;
+const SlotMap = @import("slot_map.zig").SlotMap;
+const Instance = cards.Instance;
+const Template = cards.Template;
 
 pub const Mob = struct {
     wounds: f32 = 0,
     state: State,
     engagement: Engagement,
+    stats: stats.Block,
+
+    // haxxx
+    slot_map: SlotMap(*Instance),
+    hand: std.ArrayList(*Instance),
+    in_play: std.ArrayList(*Instance),
+
     // fatigue: f32,  // attention split
     // focus: f32,    // cumulative
+    pub fn init(alloc: std.mem.Allocator) !Mob { 
+        return Mob{
+            .slot_map = try SlotMap(*Instance).init(alloc),
+            .hand = try std.ArrayList(*Instance).initCapacity(alloc, 10),
+            .in_play = try std.ArrayList(*Instance).initCapacity(alloc, 10),
+            .wounds = 0,
+            .state = State{
+                .balance = 1.0,
+            },
+            .engagement = Engagement{
+                .pressure = 0.5,
+                .control = 0.5,
+                .position = 0.5,
+                .range = .medium,
+            },
+            .stats = stats.Block.splat(5),
+        };
+    }
+
+    pub fn deinit(self: *Mob, alloc: std.mem.Allocator) void {
+        std.debug.print("DEINIT MOB\n",.{});
+        self.hand.deinit(alloc);
+        for (self.in_play.items) |item| alloc.destroy(item);
+        self.in_play.deinit(alloc);
+        self.slot_map.deinit();
+        alloc.destroy(self);
+    }
+
+    pub fn play(self: *Mob, alloc: std.mem.Allocator, template: *const Template) !void {
+        var instance = try alloc.create(Instance);
+        instance.template = template;
+        const id: EntityID = try self.slot_map.insert(instance);
+        instance.id = id;
+        self.in_play.appendAssumeCapacity(instance);
+    }
 };
+
+pub const Enemy = struct {};
 
 // Per-entity (player or mob)
 pub const State = struct {

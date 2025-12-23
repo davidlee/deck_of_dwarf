@@ -59,8 +59,8 @@ pub const Player = struct {
             .wounds = try std.ArrayList(body.Wound).initCapacity(alloc, 5),
             .conditions = try std.ArrayList(damage.Condition).initCapacity(alloc, 5),
             .equipment = try std.ArrayList(*const cards.Instance).initCapacity(alloc, 5),
-            .stamina = 5,
-            .stamina_available = 5,
+            .stamina = 10,
+            .stamina_available = 10,
             .state = combatant.State{.balance = 1.0 },
         };
     }

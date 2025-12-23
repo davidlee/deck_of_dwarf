@@ -124,7 +124,7 @@ pub const TargetQuery = union(enum) {
     single: Selector, // e.g. explicit target chosen during play
     all_enemies,
     self,
-    body_part: body.Tag,
+    body_part: body.PartTag,
     event_source,
 };
 
@@ -220,4 +220,13 @@ pub const Template = struct {
 pub const Instance = struct {
     id: EntityID,
     template: *const Template,
+};
+
+// when cards are played, the level of commitment modifies the effects
+// no reward without risk ...
+pub const Stakes = enum {
+    probing,
+    guarded,
+    committed,
+    reckless,
 };

@@ -108,7 +108,7 @@ pub const Deck = struct {
                 // try self.deck.append(alloc, instance);
                 if (i < 5) {
                     try self.hand.append(alloc, instance);
-                    std.debug.print("->hand: {s}\n", .{instance.template.name});
+                    // std.debug.print("->hand: {s}\n", .{instance.template.name});
                 } else {
                     try self.draw.append(alloc, instance);
                 }

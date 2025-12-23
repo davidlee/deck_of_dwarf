@@ -24,6 +24,8 @@ const Effect = cards.Effect;
 const Expression = cards.Expression;
 const Technique = cards.Technique;
 
+const log = std.debug.print;
+
 pub const CommandError = error{
     CommandInvalid,
     InsufficientStamina,
@@ -83,11 +85,18 @@ pub const EventProcessor = struct {
     }
 
     pub fn dispatchEvent(self: *EventProcessor, event_system: *EventSystem) !bool {
-        _ = self;
         const result = event_system.pop();
         if (result) |event| {
-            std.debug.print("--> dispatchEvent: {}\n", .{event});
+            // std.debug.print("             -> dispatchEvent: {}\n", .{event});
             switch (event) {
+                .game_state_transitioned_to => |state| {
+                    std.debug.print("\n game state ==> {}\n", .{state});
+                    for (self.world.encounter.?.enemies.items) |mob| {
+                        for (mob.in_play.items) |instance| {
+                            log("cards in play (mob): {s}\n", .{instance.template.name});
+                        }
+                    }
+                },
                 // .played_action_card => |data| {
                 //     // g  try self.world.deck.move(data.instance, .hand, .in_play);
                 //     // try event_system.push(Event{ .card_moved = .{ .instance = data.instance, .from = .hand, .to = .in_play } });

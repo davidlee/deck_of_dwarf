@@ -12,6 +12,8 @@ const gfx = @import("graphics.zig");
 const cards = @import("cards.zig");
 const deck = @import("card_list.zig").BeginnerDeck;
 
+const harness = @import("harness.zig");
+
 const CommandHandler = @import("apply.zig").CommandHandler;
 
 pub fn main() !void {
@@ -52,7 +54,7 @@ pub fn main() !void {
     // Useful for limiting the FPS and getting the delta time.
     var fps_capper = s.extras.FramerateCapper(f32){ .mode = .{ .limited = config.fps } };
 
-    try runTestCase(world);
+    try harness.runTestCase(world);
     std.process.exit(0);
 
     var quit = false;
@@ -99,26 +101,4 @@ pub fn main() !void {
                 },
             };
     }
-}
-
-fn runTestCase(world: *World) !void {
-    // for (world.deck.allInstances()) |c|
-    //     std.debug.print("deck: {any}\n", .{c});
-
-    const card = world.deck.hand.items[0];
-    try world.commandHandler.playActionCard(card);
-
-    world.events.swap_buffers();
-    try world.step(); // let's see that event;
-
-    std.debug.print("current_state: {}\n", .{world.fsm.currentState()});
-
-    try world.commandHandler.gameStateTransition(.player_reaction);
-    world.events.swap_buffers();
-
-    try world.step();
-
-    std.debug.print("current_state: {}\n", .{world.fsm.currentState()});
-
-    std.process.exit(0);
 }

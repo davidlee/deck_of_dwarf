@@ -4,7 +4,8 @@ const DamageKind = @import("damage.zig").Kind;
 pub const PartIndex = u16; // Up to 65k body parts is enough
 pub const NO_PARENT = std.math.maxInt(PartIndex);
 
-pub const Tag = enum {
+// const Tag = PartTag;
+pub const PartTag = enum {
     // Human exterior bits
     head,
     eye,
@@ -58,7 +59,7 @@ pub const TissueLayer = enum { bone, artery, muscle, fat, nerve, skin };
 pub const Part = struct {
     name_hash: u32, // e.g. hash("left_index_finger") for lookups
     def_id: u16,
-    tag: Tag,
+    tag: PartTag,
     parent: ?PartIndex, // Index of the body part this is attached to
 
     integrity: f32, // destroyed at 0.0
@@ -101,7 +102,7 @@ pub const PartId = struct {
 pub const PartDef = struct {
     id: PartId,
     parent: ?PartId,
-    tag: Tag,
+    tag: PartTag,
     side: Side,
     name: []const u8,
     base_hit_chance: f32,
@@ -138,7 +139,7 @@ pub const Wound = struct {
 // An array of nodes defining the topology
 fn definePart(
     comptime name: []const u8,
-    tag: Tag,
+    tag: PartTag,
     side: Side,
     comptime parent_name: ?[]const u8,
 ) PartDef {
@@ -153,7 +154,7 @@ fn definePart(
         .trauma_mult = 1.0,
     };
 }
-// to look up parts by ID at runtime, store a std.AutoHashMap(u64, PartIndex) 
+// to look up parts by ID at runtime, store a std.AutoHashMap(u64, PartIndex)
 // when building the body, using part.id.hash as the key.
 
 pub const HumanoidPlan = [_]PartDef{

@@ -16,7 +16,7 @@ pub const Layer = enum(u8) {
 // inventory
 //
 pub const Coverage = struct {
-    part_tags: []const body.BodyPartTag,
+    part_tags: []const body.PartTag,
     layer: Layer,
 };
 

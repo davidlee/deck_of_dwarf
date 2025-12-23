@@ -43,15 +43,18 @@ pub const Encounter = struct {
         var e = Encounter{
             .enemies = try std.ArrayList(*Mob).initCapacity(alloc, 5),
         };
-        var mob = try alloc.create(Mob);
-        mob.wounds = 0.0;
+        const mob = try alloc.create(Mob);
+        mob.* = try Mob.init(alloc);
 
         try e.enemies.append(alloc, mob);
         return e;
     }
 
     fn deinit(self: *Encounter, alloc: std.mem.Allocator) void {
-        for (self.enemies.items) |nme| alloc.destroy(nme);
+        for (self.enemies.items) |nme| {
+            nme.deinit(alloc);
+            // alloc.destroy(nme);
+        }
         self.enemies.deinit(alloc);
     }
 };
