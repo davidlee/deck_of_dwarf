@@ -54,6 +54,12 @@ pub const PartTag = enum {
 
 pub const Side = enum(u8) { left, right, center, none };
 
+pub const Dominance = enum {
+    left,
+    right,
+    ambidextrous, // oozes, trained fighters, octopi
+};
+
 pub const TissueLayer = enum { bone, artery, muscle, fat, nerve, skin };
 
 pub const Part = struct {
@@ -63,35 +69,13 @@ pub const Part = struct {
     side: Side,
     parent: ?PartIndex, // attachment hierarchy (arm → shoulder)
     enclosing: ?PartIndex, // containment (heart → torso)
+    flags: PartDef.Flags, // capability flags copied from def
 
     integrity: f32, // destroyed at 0.0
     wounds: std.ArrayList(Wound),
     is_severed: bool, // If true, all children are implicitly disconnected
-
-    // FIXME: performantly look up PartDef flags before checking condition
-    // must we also check parent isn't severed?
-    fn can_grasp(self: *Part) bool {
-        return self.integrity > 0.6;
-    }
-
-    fn can_support_weight(self: *Part) bool {
-        return self.integrity > 0.3;
-    }
-
-    fn can_walk(self: *Part) bool {
-        return self.integrity > 0.4;
-    }
-
-    fn can_run(self: *Part) bool {
-        return self.integrity > 0.8;
-    }
-
-    fn can_write(self: *Part) bool {
-        return self.integrity > 0.8;
-    }
-
-    // durability: f32, // an abstraction of density, circumference & hardness. Influenced by species + individual traits.
-    // armour: precompute protective layers
+    // Note: capability checks (can_grasp, can_stand, etc) are on Body, not Part,
+    // because they require tree traversal for chain integrity.
 };
 
 pub const PartId = struct {
@@ -103,6 +87,15 @@ pub const PartId = struct {
 };
 
 pub const PartDef = struct {
+    pub const Flags = packed struct {
+        is_vital: bool = false,
+        is_internal: bool = false,
+        can_grasp: bool = false,
+        can_stand: bool = false,
+        can_see: bool = false,
+        can_hear: bool = false,
+    };
+
     id: PartId,
     parent: ?PartId, // attachment: arm → shoulder → torso
     enclosing: ?PartId, // containment: heart → torso (must breach torso to reach heart)
@@ -112,14 +105,7 @@ pub const PartDef = struct {
     base_hit_chance: f32,
     base_durability: f32,
     trauma_mult: f32,
-    flags: packed struct {
-        is_vital: bool = false,
-        is_internal: bool = false,
-        can_grasp: bool = false,
-        can_stand: bool = false,
-        can_see: bool = false,
-        can_hear: bool = false,
-    } = .{},
+    flags: Flags = .{},
 };
 
 pub const Body = struct {
@@ -146,7 +132,8 @@ pub const Body = struct {
                 .side = def.side,
                 .parent = null, // resolved in second pass
                 .enclosing = null, // resolved in second pass
-                .integrity = def.base_durability,
+                .flags = def.flags,
+                .integrity = 1.0, // start at full health (durability is for damage calc)
                 .wounds = try std.ArrayList(Wound).initCapacity(alloc, 0),
                 .is_severed = false,
             };
@@ -204,17 +191,120 @@ pub const Body = struct {
         return false;
     }
 
+    /// Compute effective integrity for all parts in one pass.
+    /// Assumes parts are in topological order (parents before children).
+    /// effective = self.integrity * parent.effective (propagates damage down tree)
+    pub fn computeEffectiveIntegrities(self: *const Body, out: []f32) void {
+        std.debug.assert(out.len >= self.parts.items.len);
+
+        for (self.parts.items, 0..) |*part, i| {
+            if (part.is_severed) {
+                out[i] = 0;
+            } else if (part.parent) |parent_idx| {
+                out[i] = part.integrity * out[parent_idx];
+            } else {
+                out[i] = part.integrity; // root
+            }
+        }
+    }
+
+    /// Get effective integrity for a single part (convenience wrapper)
+    pub fn effectiveIntegrity(self: *const Body, index: PartIndex) f32 {
+        var buf: [256]f32 = undefined;
+        self.computeEffectiveIntegrities(buf[0..self.parts.items.len]);
+        return buf[index];
+    }
+
+    /// Compute grasp strength for a grasping part.
+    /// Factors in: part integrity, children integrity, chain integrity
+    pub fn graspStrength(self: *const Body, part_idx: PartIndex) f32 {
+        var buf: [256]f32 = undefined;
+        const eff = buf[0..self.parts.items.len];
+        self.computeEffectiveIntegrities(eff);
+
+        if (eff[part_idx] <= 0) return 0;
+
+        var strength = eff[part_idx];
+
+        // Children contribute proportionally
+        var total_children: f32 = 0;
+        var functional_integrity: f32 = 0;
+
+        var iter = self.getChildren(part_idx);
+        while (iter.next()) |child_idx| {
+            total_children += 1;
+            const child = &self.parts.items[child_idx];
+            if (!child.is_severed) {
+                functional_integrity += eff[child_idx];
+            }
+        }
+
+        if (total_children > 0) {
+            // 5 fingers at 1.0 = 1.0, 3 fingers at 1.0 = 0.6
+            strength *= functional_integrity / total_children;
+        }
+
+        return strength;
+    }
+
+    /// Result of functionalGraspingParts query
+    pub const GraspingPartsResult = struct {
+        parts: [8]PartIndex = undefined,
+        len: usize = 0,
+
+        pub fn slice(self: *const GraspingPartsResult) []const PartIndex {
+            return self.parts[0..self.len];
+        }
+    };
+
+    /// Get all functional grasping parts above a minimum strength threshold
+    pub fn functionalGraspingParts(self: *const Body, min_strength: f32) GraspingPartsResult {
+        var result = GraspingPartsResult{};
+
+        for (self.parts.items, 0..) |p, i| {
+            if (result.len >= 8) break;
+            const idx: PartIndex = @intCast(i);
+            if (p.flags.can_grasp) {
+                if (self.graspStrength(idx) >= min_strength) {
+                    result.parts[result.len] = idx;
+                    result.len += 1;
+                }
+            }
+        }
+        return result;
+    }
+
+    /// Overall mobility score based on standing parts
+    pub fn mobilityScore(self: *const Body) f32 {
+        var buf: [256]f32 = undefined;
+        const eff = buf[0..self.parts.items.len];
+        self.computeEffectiveIntegrities(eff);
+
+        var total: f32 = 0;
+        var count: f32 = 0;
+
+        for (self.parts.items, 0..) |p, i| {
+            if (p.flags.can_stand) {
+                total += eff[i];
+                count += 1;
+            }
+        }
+
+        return if (count > 0) total / count else 0;
+    }
+
     const ChildIterator = struct {
         body: *const Body,
         parent: PartIndex,
         index: usize,
 
-        pub fn next(self: *ChildIterator) ?*Part {
+        pub fn next(self: *ChildIterator) ?PartIndex {
             while (self.index < self.body.parts.items.len) : (self.index += 1) {
                 const part = &self.body.parts.items[self.index];
                 if (part.parent == self.parent) {
+                    const idx: PartIndex = @intCast(self.index);
                     self.index += 1;
-                    return part;
+                    return idx;
                 }
             }
             return null;
@@ -226,12 +316,13 @@ pub const Body = struct {
         enclosing: PartIndex,
         index: usize,
 
-        pub fn next(self: *EnclosedIterator) ?*Part {
+        pub fn next(self: *EnclosedIterator) ?PartIndex {
             while (self.index < self.body.parts.items.len) : (self.index += 1) {
                 const part = &self.body.parts.items[self.index];
                 if (part.enclosing == self.enclosing) {
+                    const idx: PartIndex = @intCast(self.index);
                     self.index += 1;
-                    return part;
+                    return idx;
                 }
             }
             return null;
@@ -266,7 +357,7 @@ pub const Wound = struct {
 
 // === Part definition helpers ===
 
-const PartFlags = @TypeOf(@as(PartDef, undefined).flags);
+const PartFlags = PartDef.Flags;
 
 const PartStats = struct {
     hit_chance: f32,
@@ -551,7 +642,8 @@ test "child iterator finds direct children" {
     // Count children of left_hand (should be 5: thumb + 4 fingers)
     var iter = body.getChildren(hand_idx);
     var count: usize = 0;
-    while (iter.next()) |child| {
+    while (iter.next()) |child_idx| {
+        const child = &body.parts.items[child_idx];
         try std.testing.expect(child.tag == .finger or child.tag == .thumb);
         count += 1;
     }
@@ -568,9 +660,92 @@ test "enclosed iterator finds organs" {
     // Count organs enclosed by torso (heart, left_lung, right_lung)
     var iter = body.getEnclosed(torso_idx);
     var count: usize = 0;
-    while (iter.next()) |enclosed| {
+    while (iter.next()) |enclosed_idx| {
+        const enclosed = &body.parts.items[enclosed_idx];
         try std.testing.expect(enclosed.tag == .heart or enclosed.tag == .lung);
         count += 1;
     }
     try std.testing.expectEqual(@as(usize, 3), count);
+}
+
+test "effective integrity propagates through chain" {
+    const alloc = std.testing.allocator;
+    var body = try Body.fromPlan(alloc, &HumanoidPlan);
+    defer body.deinit();
+
+    const shoulder_idx = body.indexOf("left_shoulder").?;
+    const hand_idx = body.indexOf("left_hand").?;
+
+    // Full integrity chain
+    const hand_eff_before = body.effectiveIntegrity(hand_idx);
+    try std.testing.expect(hand_eff_before > 0.9);
+
+    // Damage shoulder to 50%
+    body.parts.items[shoulder_idx].integrity = 0.5;
+
+    // Hand effective integrity should be reduced
+    const hand_eff_after = body.effectiveIntegrity(hand_idx);
+    try std.testing.expect(hand_eff_after < hand_eff_before);
+    try std.testing.expect(hand_eff_after <= 0.5);
+}
+
+test "grasp strength factors in fingers" {
+    const alloc = std.testing.allocator;
+    var body = try Body.fromPlan(alloc, &HumanoidPlan);
+    defer body.deinit();
+
+    const hand_idx = body.indexOf("left_hand").?;
+
+    // Full strength with all fingers
+    const full_strength = body.graspStrength(hand_idx);
+    try std.testing.expect(full_strength > 0.9);
+
+    // Sever two fingers
+    const idx_finger = body.indexOf("left_index_finger").?;
+    const mid_finger = body.indexOf("left_middle_finger").?;
+    body.parts.items[idx_finger].is_severed = true;
+    body.parts.items[mid_finger].is_severed = true;
+
+    // Reduced strength (3/5 fingers working)
+    const reduced_strength = body.graspStrength(hand_idx);
+    try std.testing.expect(reduced_strength < full_strength);
+    try std.testing.expect(reduced_strength > 0.5); // Still usable
+}
+
+test "mobility score with damaged groin" {
+    const alloc = std.testing.allocator;
+    var body = try Body.fromPlan(alloc, &HumanoidPlan);
+    defer body.deinit();
+
+    const groin_idx = body.indexOf("groin").?;
+
+    // Full mobility
+    const full_mobility = body.mobilityScore();
+    try std.testing.expect(full_mobility > 0.9);
+
+    // Damage groin (affects both legs)
+    body.parts.items[groin_idx].integrity = 0.3;
+
+    // Reduced mobility
+    const reduced_mobility = body.mobilityScore();
+    try std.testing.expect(reduced_mobility < full_mobility);
+    try std.testing.expect(reduced_mobility < 0.5);
+}
+
+test "functional grasping parts" {
+    const alloc = std.testing.allocator;
+    var body = try Body.fromPlan(alloc, &HumanoidPlan);
+    defer body.deinit();
+
+    // Both hands should be functional
+    const hands = body.functionalGraspingParts(0.5);
+    try std.testing.expectEqual(@as(usize, 2), hands.len);
+
+    // Sever left arm
+    const left_arm_idx = body.indexOf("left_arm").?;
+    body.parts.items[left_arm_idx].is_severed = true;
+
+    // Only right hand functional now
+    const hands_after = body.functionalGraspingParts(0.5);
+    try std.testing.expectEqual(@as(usize, 1), hands_after.len);
 }
