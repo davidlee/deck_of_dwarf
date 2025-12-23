@@ -1,0 +1,116 @@
+const std = @import("std");
+const body = @import("body.zig");
+
+pub const Mob = struct {
+    wounds: f32 = 0,
+    state: State,
+    engagement: Engagement,
+    // fatigue: f32,  // attention split
+    // focus: f32,    // cumulative
+};
+
+// Per-entity (player or mob)
+pub const State = struct {
+    balance: f32, // 0-1, intrinsic stability
+
+    // Could also include:
+    // focus: f32,          // Attention split across engagements
+    // fatigue: f32,        // Accumulates across engagements
+};
+
+pub const Reach = enum {
+    far,
+    medium,
+    near,
+    spear,
+    longsword,
+    sabre,
+    dagger,
+    clinch,
+};
+
+pub const AdvantageAxis = enum {
+    balance,
+    pressure,
+    control,
+    position,
+};
+
+// Per-engagement (one per mob, attached to mob)
+pub const Engagement = struct {
+    // All 0-1, where 0.5 = neutral
+    // >0.5 = player advantage, <0.5 = mob advantage
+    pressure: f32,
+    control: f32,
+    position: f32,
+
+    range: Reach, // Current distance
+
+    // Helpers
+    pub fn playerAdvantage(self: Engagement) f32 {
+        return (self.pressure + self.control + self.position) / 3.0;
+    }
+
+    pub fn mobAdvantage(self: Engagement) f32 {
+        return 1.0 - self.playerAdvantage();
+    }
+
+    pub fn invert(self: Engagement) Engagement {
+        return .{
+            .pressure = 1.0 - self.pressure,
+            .control = 1.0 - self.control,
+            .position = 1.0 - self.position,
+            .range = self.range,
+        };
+    }
+};
+
+//      // Derived: overall openness to decisive strike
+// pub fn vulnerability(self: Advantage) f32 {
+//     // When any axis is bad enough, you're open
+//     const worst = @min(@min(self.control, self.position), self.balance);
+//     // Pressure contributes but isn't sufficient alone
+//     return (1.0 - worst) * 0.7 + (1.0 - self.pressure) * 0.3;
+// }
+// Reading Advantage
+//
+// From the player's perspective against a specific mob:
+//
+// pub fn playerVsMob(player: *Player, mob: *Mob) struct { f32, f32 } {
+//     // Player's vulnerability in this engagement
+//     const player_vuln = (1.0 - mob.engagement.playerAdvantage()) * 0.6
+//                       + (1.0 - player.state.balance) * 0.4;
+//
+//     // Mob's vulnerability in this engagement
+//     const mob_vuln = mob.engagement.playerAdvantage() * 0.6
+//                    + (1.0 - mob.state.balance) * 0.4;
+//
+//     return .{ player_vuln, mob_vuln };
+// }
+//
+// Balance contributes to vulnerability in all engagements. Relational advantage only matters for this engagement.
+//
+// Attention split:
+// When player acts against mob A, mob B might get a "free" advantage tick:
+// pub fn applyAttentionPenalty(player: *Player, focused_mob: *Mob, all_mobs: []*Mob) void {
+//     for (all_mobs) |mob| {
+//         if (mob != focused_mob) {
+//             // Unfocused enemies gain slight positional advantage
+//             mob.engagement.position -= 0.05;  // Toward mob advantage
+//         }
+//     }
+// }
+//
+// Overcommitment penalty spreads:
+// When player whiffs a heavy attack against mob A:
+// // Player's balance drops (intrinsic)
+// player.state.balance -= 0.2;
+//
+// // This affects ALL engagements because balance is intrinsic
+// // No need to update each mob's engagement — the vulnerability
+// // calculation already incorporates player.state.balance
+//
+// Mob coordination:
+// If mobs are smart, they can exploit split attention:
+// // Mob A feints to draw player's focus
+// // Mob B's pattern shifts to "exploit opening" when player.engagement with A shows commitment

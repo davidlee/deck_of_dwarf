@@ -235,6 +235,201 @@ Movement as First-Class Citizen
   4. Environmental: Push them down stairs, into mud, off a wall
 
 
+REV 4
+
+ Relational vs Intrinsic
+
+  Intrinsic (belongs to the entity):
+  - Balance — your own stability, affected by your actions and hits taken
+  - Stamina — already tracked
+  - Wounds — already tracked
+
+  Relational (belongs to a pair):
+  - Pressure — who's pushing whom
+  - Control — whose blade is dominant in this line
+  - Position — spatial advantage relative to this opponent
+
+  The relational properties are zero-sum. If you have 0.7 pressure against mob A, mob A has 0.3 pressure against you. Same information, different perspective.
+
+  ---
+  Data Model
+
+  // Per-entity (player or mob)
+  pub const CombatantState = struct {
+      balance: f32,           // 0-1, intrinsic stability
+
+      // Could also include:
+      // focus: f32,          // Attention split across engagements
+      // fatigue: f32,        // Accumulates across engagements
+  };
+
+  // Per-engagement (one per mob, attached to mob)
+  pub const Engagement = struct {
+      // All 0-1, where 0.5 = neutral
+      // >0.5 = player advantage, <0.5 = mob advantage
+      pressure: f32,
+      control: f32,
+      position: f32,
+
+      range: Reach,           // Current distance
+
+      // Helpers
+      pub fn playerAdvantage(self: Engagement) f32 {
+          return (self.pressure + self.control + self.position) / 3.0;
+      }
+
+      pub fn mobAdvantage(self: Engagement) f32 {
+          return 1.0 - self.playerAdvantage();
+      }
+
+      pub fn invert(self: Engagement) Engagement {
+          return .{
+              .pressure = 1.0 - self.pressure,
+              .control = 1.0 - self.control,
+              .position = 1.0 - self.position,
+              .range = self.range,
+          };
+      }
+  };
+
+  Attach to mob since they're the "per-opponent" entity:
+
+  pub const Mob = struct {
+      // Existing
+      wounds: f32,
+
+      // New
+      state: CombatantState,
+      engagement: Engagement,    // vs player
+  };
+
+  Player also has intrinsic state:
+
+  pub const Player = struct {
+      // Existing
+      stamina: f32,
+      stats: stats.Block,
+      wounds: std.ArrayList(body.Wound),
+
+      // New
+      state: CombatantState,
+      // No engagement here — it's on each mob
+  };
+
+  ---
+  Reading Advantage
+
+  From the player's perspective against a specific mob:
+
+  pub fn playerVsMob(player: *Player, mob: *Mob) struct { f32, f32 } {
+      // Player's vulnerability in this engagement
+      const player_vuln = (1.0 - mob.engagement.playerAdvantage()) * 0.6
+                        + (1.0 - player.state.balance) * 0.4;
+
+      // Mob's vulnerability in this engagement
+      const mob_vuln = mob.engagement.playerAdvantage() * 0.6
+                     + (1.0 - mob.state.balance) * 0.4;
+
+      return .{ player_vuln, mob_vuln };
+  }
+
+  Balance contributes to vulnerability in all engagements. Relational advantage only matters for this engagement.
+
+  ---
+  Multi-Opponent Dynamics
+
+  With 2+ mobs, interesting things happen:
+
+  Attention split:
+  When player acts against mob A, mob B might get a "free" advantage tick:
+  pub fn applyAttentionPenalty(player: *Player, focused_mob: *Mob, all_mobs: []*Mob) void {
+      for (all_mobs) |mob| {
+          if (mob != focused_mob) {
+              // Unfocused enemies gain slight positional advantage
+              mob.engagement.position -= 0.05;  // Toward mob advantage
+          }
+      }
+  }
+
+  Overcommitment penalty spreads:
+  When player whiffs a heavy attack against mob A:
+  // Player's balance drops (intrinsic)
+  player.state.balance -= 0.2;
+
+  // This affects ALL engagements because balance is intrinsic
+  // No need to update each mob's engagement — the vulnerability
+  // calculation already incorporates player.state.balance
+
+  Mob coordination:
+  If mobs are smart, they can exploit split attention:
+  // Mob A feints to draw player's focus
+  // Mob B's pattern shifts to "exploit opening" when player.engagement with A shows commitment
+
+  ---
+  Example Tick
+
+  Situation:
+  - Player vs Mob A (engagement: pressure 0.6, control 0.5, position 0.5)
+  - Player vs Mob B (engagement: pressure 0.4, control 0.5, position 0.5)
+  - Player balance: 0.8
+  - Mob A balance: 0.7
+  - Mob B balance: 0.9
+
+  Player plays: Committed Strike against Mob A
+
+  Resolution:
+  // Player focuses on A
+  applyAttentionPenalty(player, mob_a, &.{mob_a, mob_b});
+  // mob_b.engagement.position: 0.5 -> 0.45 (mob B gains slight angle)
+
+  // Strike vs Mob A
+  if (strike_lands) {
+      mob_a.engagement.pressure += 0.15;  // player pressing harder
+      mob_a.engagement.control += 0.1;    // player has initiative
+      mob_a.state.balance -= 0.2;         // mob staggered
+      // damage calculated separately
+  } else {
+      mob_a.engagement.control -= 0.15;   // player's blade out of line
+      player.state.balance -= 0.15;       // player overextended (affects BOTH engagements)
+  }
+
+  Mob B plays: Advance + Probe
+
+  mob_b.engagement.range = .near;         // closed distance
+  mob_b.engagement.position -= 0.1;       // mob gains angle (player was focused on A)
+  // probe doesn't do damage but tests player's response
+
+  After this tick:
+  - Player is potentially winning vs A but exposed vs B
+  - Player's balance affects both fights
+
+  ---
+  The "Two Clocks Same Time" Question
+
+  You asked about consistency. Here's how it resolves:
+
+  The engagements are independent because you can genuinely be in different states with different opponents. You're pressing mob A while mob B is pressing you — that's a real tactical situation, not a contradiction.
+
+  What is shared:
+  - Player's balance (if you're off-balance, you're off-balance against everyone)
+  - Player's stamina
+  - Player's position in space (if movement matters beyond per-engagement range)
+
+  The model handles this by making intrinsic state (balance) affect all engagements through the vulnerability calculation, while relational state (pressure, control, position) is per-engagement.
+
+  ---
+  Open Question: Engagement Coupling
+
+  Should engagements affect each other beyond attention split?
+
+  Scenario: Player parries mob A's attack beautifully. Should this:
+  1. Only improve player vs A engagement
+  2. Also intimidate mob B (pressure shift)
+  3. Also demonstrate skill to mob B (behavior change)
+
+  Option 1 is simplest. Options 2-3 add tactical depth but complexity. Probably start with 1, layer in 2-3 as "smart mob" behaviors.
+
+  ---
 
 
 
@@ -802,6 +997,5 @@ REV 1
   | Maneuver  | Reposition       | kind, distance_change, stance_change      |
 
   The CombatState system handles combo/opening logic through temporal windows rather than hardcoded chains.
-
 
 

@@ -5,7 +5,7 @@ const damage = @import("damage.zig");
 const stats = @import("stats.zig");
 const cards = @import("cards.zig");
 const card_list = @import("card_list.zig");
-const mob = @import("mob.zig");
+const combatant = @import("combatant.zig");
 const events = @import("events.zig");
 
 const Event = events.Event;
@@ -15,7 +15,7 @@ const EntityID = @import("entity.zig").EntityID;
 const world = @import("world.zig");
 const World = world.World;
 const Player = @import("player.zig").Player;
-const Mob = mob.Mob;
+const Mob = combatant.Mob;
 const Rule = cards.Rule;
 const TagSet = cards.TagSet;
 const Cost = cards.Cost;
@@ -83,15 +83,16 @@ pub const EventProcessor = struct {
     }
 
     pub fn dispatchEvent(self: *EventProcessor, event_system: *EventSystem) !bool {
+        _ = self;
         const result = event_system.pop();
         if (result) |event| {
             std.debug.print("--> dispatchEvent: {}\n", .{event});
             switch (event) {
-                .played_action_card => |data| {
-                    try self.world.deck.move(data.instance, .hand, .in_play);
-                    try event_system.push(Event{ .card_moved = .{ .instance = data.instance, .from = .hand, .to = .in_play } });
-                },
-                else => |data| std.debug.print("other {}\n", .{data}),
+                // .played_action_card => |data| {
+                //     // g  try self.world.deck.move(data.instance, .hand, .in_play);
+                //     // try event_system.push(Event{ .card_moved = .{ .instance = data.instance, .from = .hand, .to = .in_play } });
+                // },
+                else => |data| std.debug.print("event processed: {}\n", .{data}),
             }
             return true;
         } else return false;
@@ -135,10 +136,6 @@ pub const CommandHandler = struct {
         if (!self.world.deck.instanceInZone(card.id, .hand)) return CommandError.CardNotInHand;
 
         // WARN: for now we assume the trigger is fine (caller's responsibility)
-        // TODO: check other shared criteria - time remaining in round, etc
-        //
-        // TODO: check that the card is in the player's hand
-        //
 
         // if all rules have valid predicates, the card is valid to play;
         for (card.template.rules) |rule| {
@@ -178,112 +175,113 @@ pub const CommandHandler = struct {
             },
         );
     }
-
-    pub fn playCardFull(self: *CommandHandler, card: *cards.Instance) !bool {
-        const alloc = self.world.alloc;
-        const encounter = &self.world.encounter.?;
-        const player = &self.world.player;
-        const game_state = self.world.fsm.currentState();
-        const techniques = self.world.deck.techniques;
-        const event_system = self.world.events;
-
-        var ecs = try std.ArrayList(EffectContext).initCapacity(alloc, 5);
-
-        // check if it's valid to play
-        // first, template-level requirements
-        // WARN: for now we assume the trigger is fine (caller's responsibility)
-        if (player.stamina < card.template.cost.stamina)
-            return CommandError.InsufficientStamina;
-
-        if (game_state != .wait_for_player)
-            return CommandError.InvalidGameState;
-
-        // TODO: check other shared criteria
-        // - time remaining in round
-
-        // if all rules have valid predicates, the card is valid to play;
-        for (card.template.rules) |rule| {
-            switch (rule.valid) {
-                .always => {},
-                else => return error.CommandInvalid,
-            }
-        }
-
-        for (card.template.rules) |rule| {
-
-            // if all rules have valid predicates, the card is valid to play;
-            // the predicates for each Effect determine whether it fires.
-
-            switch (rule.valid) {
-                .always => {},
-                else => return CommandError.NotImplemented,
-            }
-
-            // evaluate targets first, and apply the predicate as a filter
-            // against each target. This is somewhat inefficient in the event
-            // that the predicate is target agnostic, but - don't need to
-            // optimise that just yet.
-
-            for (rule.expressions) |expr| {
-                if (expr.filter) |predicate| {
-                    switch (predicate) {
-                        .always => {},
-                        else => continue, // NOT IMPLEMENTED YET
-                    }
-                }
-
-                // build an EffectContext, and evaluate target, then run .filter over each target
-                var target_list = try std.ArrayList(*Mob).initCapacity(alloc, 0);
-                defer target_list.deinit(alloc);
-
-                switch (expr.target) {
-                    .all_enemies => {
-                        for (encounter.enemies.items) |target| {
-                            const applicable: bool =
-                                if (expr.filter) |*predicate|
-                                    evaluatePredicate(predicate, card, player, target)
-                                else
-                                    true;
-
-                            if (applicable)
-                                try target_list.append(alloc, target);
-                        }
-                    },
-                    else => return CommandError.NotImplemented,
-                }
-
-                var ctx = EffectContext{
-                    .card = card,
-                    .effect = &expr.effect,
-                    .actor = player,
-                    .target = &target_list,
-                };
-
-                switch (expr.effect) {
-                    .combat_technique => |value| {
-                        const tn = techniques.get(value.name).?;
-                        ctx.technique = .{
-                            .technique = tn,
-                            .base_damage = &tn.damage,
-                        };
-                    },
-                    else => return CommandError.NotImplemented,
-                }
-                try ecs.append(alloc, ctx);
-            }
-
-            // : sink an event for the card
-            try event_system.push(Event{
-                .played_card = .{ .instance = card.id, .template = card.template.id },
-            });
-            // for (ecs.items) |ec| {}
-
-            // : sink an event for each effect
-            // : apply costs / sink more events
-        }
-        //return ecs.toOwnedSlice(alloc);
-    }
 };
+
+//     pub fn playCardFull(self: *CommandHandler, card: *cards.Instance) !bool {
+//         const alloc = self.world.alloc;
+//         const encounter = &self.world.encounter.?;
+//         const player = &self.world.player;
+//         const game_state = self.world.fsm.currentState();
+//         const techniques = self.world.deck.techniques;
+//         const event_system = self.world.events;
+//
+//         var ecs = try std.ArrayList(EffectContext).initCapacity(alloc, 5);
+//
+//         // check if it's valid to play
+//         // first, template-level requirements
+//         // WARN: for now we assume the trigger is fine (caller's responsibility)
+//         if (player.stamina < card.template.cost.stamina)
+//             return CommandError.InsufficientStamina;
+//
+//         if (game_state != .wait_for_player)
+//             return CommandError.InvalidGameState;
+//
+//         // TODO: check other shared criteria
+//         // - time remaining in round
+//
+//         // if all rules have valid predicates, the card is valid to play;
+//         for (card.template.rules) |rule| {
+//             switch (rule.valid) {
+//                 .always => {},
+//                 else => return error.CommandInvalid,
+//             }
+//         }
+//
+//         for (card.template.rules) |rule| {
+//
+//             // if all rules have valid predicates, the card is valid to play;
+//             // the predicates for each Effect determine whether it fires.
+//
+//             switch (rule.valid) {
+//                 .always => {},
+//                 else => return CommandError.NotImplemented,
+//             }
+//
+//             // evaluate targets first, and apply the predicate as a filter
+//             // against each target. This is somewhat inefficient in the event
+//             // that the predicate is target agnostic, but - don't need to
+//             // optimise that just yet.
+//
+//             for (rule.expressions) |expr| {
+//                 if (expr.filter) |predicate| {
+//                     switch (predicate) {
+//                         .always => {},
+//                         else => continue, // NOT IMPLEMENTED YET
+//                     }
+//                 }
+//
+//                 // build an EffectContext, and evaluate target, then run .filter over each target
+//                 var target_list = try std.ArrayList(*Mob).initCapacity(alloc, 0);
+//                 defer target_list.deinit(alloc);
+//
+//                 switch (expr.target) {
+//                     .all_enemies => {
+//                         for (encounter.enemies.items) |target| {
+//                             const applicable: bool =
+//                                 if (expr.filter) |*predicate|
+//                                     evaluatePredicate(predicate, card, player, target)
+//                                 else
+//                                     true;
+//
+//                             if (applicable)
+//                                 try target_list.append(alloc, target);
+//                         }
+//                     },
+//                     else => return CommandError.NotImplemented,
+//                 }
+//
+//                 var ctx = EffectContext{
+//                     .card = card,
+//                     .effect = &expr.effect,
+//                     .actor = player,
+//                     .target = &target_list,
+//                 };
+//
+//                 switch (expr.effect) {
+//                     .combat_technique => |value| {
+//                         const tn = techniques.get(value.name).?;
+//                         ctx.technique = .{
+//                             .technique = tn,
+//                             .base_damage = &tn.damage,
+//                         };
+//                     },
+//                     else => return CommandError.NotImplemented,
+//                 }
+//                 try ecs.append(alloc, ctx);
+//             }
+//
+//             // : sink an event for the card
+//             try event_system.push(Event{
+//                 .played_card = .{ .instance = card.id, .template = card.template.id },
+//             });
+//             // for (ecs.items) |ec| {}
+//
+//             // : sink an event for each effect
+//             // : apply costs / sink more events
+//         }
+//         //return ecs.toOwnedSlice(alloc);
+//     }
+// };
 
 fn evaluatePredicate(p: *const cards.Predicate, card: *const cards.Instance, actor: *Player, target: *Mob) bool {
     return switch (p.*) {

@@ -7,6 +7,8 @@ const EntityID = @import("entity.zig").EntityID;
 const damage = @import("damage.zig");
 const stats = @import("stats.zig");
 const body = @import("body.zig");
+const weapon = @import("weapon.zig");
+const combatant = @import("combatant.zig");
 const TechniqueEntries = @import("card_list.zig").TechniqueEntries;
 
 pub const ID = u64;
@@ -105,6 +107,10 @@ pub const Predicate = union(enum) {
     // wounds ...
     // weapon ...
     has_tag: TagSet, // bitmask with one bit set
+    weapon_category: weapon.Category,
+    weapon_reach: struct { op: Comparator, value: combatant.Reach },
+    range: struct { op: Comparator, value: combatant.Reach },
+    advantage_threshold: struct { axis: combatant.AdvantageAxis, op: Comparator, value: f32 },
     not: *const Predicate,
     all: []const Predicate,
     any: []const Predicate,
@@ -122,6 +128,15 @@ pub const TargetQuery = union(enum) {
     event_source,
 };
 
+pub const Exclusivity = enum {
+    weapon, // keeps one or both arms busy, depending on grip
+    primary, // main hand only
+    hand, // any hand will do
+    arms, // both arms
+    footwork, // moving, kicking, a knee to the face
+    concentration, // eyes, voice, brain. Spells, taunts, etc. needs a value?
+};
+
 pub const TechniqueID = enum {
     thrust,
     swing,
@@ -136,6 +151,7 @@ pub const Technique = struct {
     name: []const u8,
     damage: damage.Base,
     difficulty: f32,
+    exclusivity: Exclusivity = .weapon,
 
     // region: null, // hit location weighting
 
