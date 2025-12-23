@@ -162,4 +162,19 @@ pub fn build(b: *std.Build) !void {
     } else {
         try buildBin(b, target, optimize);
     }
+
+    // Test step
+    const test_step = b.step("test", "Run unit tests");
+
+    // Add test modules - body.zig pulls in its dependencies
+    const body_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/body.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_body_tests = b.addRunArtifact(body_tests);
+    test_step.dependOn(&run_body_tests.step);
 }

@@ -107,6 +107,7 @@ pub const Agent = struct {
     // sourced from cards.equipped
     armour: armour.Stack,
     weapons: Armament,
+    dominant_side: body.Side = .right, // .center == ambidextrous
 
     // state (wounds kept in body)
     balance: f32 = 1.0, // 0-1, intrinsic stability
@@ -159,6 +160,10 @@ pub const Agent = struct {
         self.immunities.deinit(alloc);
         self.resistances.deinit(alloc);
         self.vulnerabilities.deinit(alloc);
+    }
+    
+    fn isDominantSide(dominant: body.Side, side: body.Side) bool {
+        return dominant == .center or dominant.? == side;
     }
 };
 

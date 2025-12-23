@@ -52,12 +52,11 @@ pub const PartTag = enum {
     // Other creature bits ...
 };
 
-pub const Side = enum(u8) { left, right, center, none };
-
-pub const Dominance = enum {
+pub const Side = enum(u8) {
     left,
     right,
-    ambidextrous, // oozes, trained fighters, octopi
+    center, // for Agent.dominant_side, this == ambidextrous
+    none, 
 };
 
 pub const TissueLayer = enum { bone, artery, muscle, fat, nerve, skin };
