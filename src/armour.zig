@@ -1,3 +1,4 @@
+const std = @import("std");
 const body = @import("body.zig");
 const damage = @import("damage.zig");
 const inventory = @import("inventory.zig");
@@ -68,4 +69,20 @@ const Construction = struct {
 };
 
 // all armour as worn, with precomputed values
-pub const Stack = struct {};
+pub const Stack = struct {
+    // Precomputed per-part protection
+    // Key: hash(PartTag, Side) or PartIndex
+    // Value: array of LayerProtection (one per layer present)
+    coverage: std.AutoHashMap(u32, [9]?LayerProtection),
+
+    const LayerProtection = struct {
+        material: *const Material,
+        totality: Totality,
+        integrity: f32, // current durability of this piece
+    };
+
+    pub fn getProtection(self: *const Stack, part: body.PartTag, side: body.Side) []const LayerProtection {
+        _ = .{ self, part, body, side };
+        // return layers covering this part, outer to inner
+    }
+};

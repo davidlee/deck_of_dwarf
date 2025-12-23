@@ -32,7 +32,7 @@ pub fn runTestCase(world: *World) !void {
     // currently wired into BeginnerDeck
 
     // - ensure there's one enemy
-    //   - and that it has cards, stats, etc
+    //  - and that it has cards, stats, etc
 
     // - ensure there's an Encounter
     // - initialise the encounter & player / enemy state
@@ -53,12 +53,9 @@ pub fn runTestCase(world: *World) !void {
 
     try world.encounter.?.enemies.append(world.alloc, &mob);
 
-    // const templates: []const cards.Template = &card_list.BeginnerDeck;
-
-    // mob.cards.deck.deck.items.
-    // try mob.play(world.alloc, &templates[0]);
-    // try mob.play(world.alloc, &templates[0]);
-    // try mob.play(world.alloc, &templates[0]);
+    try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
+    try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
+    try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
 
     try nextFrame(world);
 
@@ -83,11 +80,6 @@ pub fn runTestCase(world: *World) !void {
 
     try nextFrame(world);
 
-    // card = world.deck.hand.items[0];
-    // try world.commandHandler.playActionCard(card);
-
-    try nextFrame(world);
-
     try world.commandHandler.gameStateTransition(.player_reaction);
     for (world.player.cards.deck.in_play.items) |inst| log("player card: {s}\n", .{inst.template.name});
 
@@ -102,11 +94,3 @@ fn nextFrame(world: *World) !void {
 
     std.debug.print("tick ... current_state: {}\n", .{world.fsm.currentState()});
 }
-//
-// pub fn play(self: combat.Agent, alloc: std.mem.Allocator, template: *const cards.Template) !void {
-//     var instance = try alloc.create(cards.Instance);
-//     instance.template = template;
-//     const id: entity.ID = try self.slot_map.insert(instance);
-//     instance.id = id;
-//     self.in_play.appendAssumeCapacity(instance);
-// }

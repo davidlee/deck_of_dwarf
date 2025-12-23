@@ -2,6 +2,7 @@ const std = @import("std");
 const lib = @import("infra");
 const PartTag = @import("body.zig").PartTag;
 const Scaling = @import("stats.zig").Scaling;
+const armour = @import("armour.zig");
 
 pub const Immunity = union(enum) {
     condition: Condition,
@@ -148,5 +149,47 @@ pub const Category = enum {
     biogogical,
     magical,
 };
+
+//  A cumulative model with material interactions:
+
+pub const Packet = struct {
+    amount: f32,
+    kind: Kind,
+    penetration: f32, // cm of material it can punch through
+
+    // After passing through a layer
+    pub fn afterLayer(self: Packet, layer: *const armour.LayerProtection) Packet {
+        // Totality check - did it find a gap?
+        // Material resistance/vulnerability
+        // Reduce amount and penetration
+        // Reduce layer integrity
+        _ = .{ self, layer };
+    }
+};
+
+// pub fn resolveHit(
+//     packet: damage.Packet,
+//     stack: *armour.Stack,
+//     body: *Body,
+//     target_part: PartIndex,
+// ) void {
+//     var remaining = packet;
+//
+//     // Outer layers first
+//     for (stack.getProtection(target_part)) |layer| {
+//         remaining = remaining.afterLayer(layer);
+//         if (remaining.amount <= 0) return; // absorbed
+//     }
+//
+//     // Damage reaches body
+//     applyWound(body, target_part, remaining);
+//
+//     // Deep penetration? Check enclosed parts
+//     if (remaining.penetration > body.parts.items[target_part].depth_threshold) {
+//         for (getEnclosedParts(body, target_part)) |internal| {
+//             // Chance to hit organ based on penetration depth
+//         }
+//     }
+// }
 
 test "Kind" {}

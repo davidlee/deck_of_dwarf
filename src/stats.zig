@@ -54,16 +54,6 @@ pub const Block = packed struct {
         };
     }
 
-    // pub fn init(alloc: std.mem.Allocator, template: Template) !Block {
-    //     var s = alloc.create(Block);
-    //     s.* = template;
-    //     return s;
-    // }
-    //
-    // pub fn deinit(self: *Body, alloc: std.mem.Allocator) void {
-    //     alloc.destroy(self);
-    // }
-
     pub fn get(self: *Block, a: Accessor) f32 {
         return switch (a) {
             .power => self.power,

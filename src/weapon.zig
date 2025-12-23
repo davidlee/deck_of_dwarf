@@ -69,14 +69,14 @@ pub const Offensive = struct {
     penetration_max: f32, // cm
 
     // modifiers against opponent
-    vs: Defensive,
+    defender_modifiers: Defensive,
 
     // against impact damage
     fragility: f32,
 };
 
 pub const Defensive = struct {
-    name: []const u8,
+    name: []const u8 = "", // unused when embedded in Offensive
     reach: combat.Reach,
     // TODO vs specific damage types
     // TODO defender hit location weights

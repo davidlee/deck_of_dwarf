@@ -57,10 +57,12 @@ pub const Side = enum(u8) { left, right, center, none };
 pub const TissueLayer = enum { bone, artery, muscle, fat, nerve, skin };
 
 pub const Part = struct {
-    name_hash: u32, // e.g. hash("left_index_finger") for lookups
-    def_id: u16,
+    name_hash: u64, // hash of name for runtime lookups
+    def_index: u16, // index into the plan this was built from
     tag: PartTag,
-    parent: ?PartIndex, // Index of the body part this is attached to
+    side: Side,
+    parent: ?PartIndex, // attachment hierarchy (arm → shoulder)
+    enclosing: ?PartIndex, // containment (heart → torso)
 
     integrity: f32, // destroyed at 0.0
     wounds: std.ArrayList(Wound),
@@ -69,23 +71,23 @@ pub const Part = struct {
     // FIXME: performantly look up PartDef flags before checking condition
     // must we also check parent isn't severed?
     fn can_grasp(self: *Part) bool {
-        self.integrity > 0.6;
+        return self.integrity > 0.6;
     }
 
     fn can_support_weight(self: *Part) bool {
-        self.integrity > 0.3;
+        return self.integrity > 0.3;
     }
 
     fn can_walk(self: *Part) bool {
-        self.integrity > 0.4;
+        return self.integrity > 0.4;
     }
 
     fn can_run(self: *Part) bool {
-        self.integrity > 0.8;
+        return self.integrity > 0.8;
     }
 
     fn can_write(self: *Part) bool {
-        self.integrity > 0.8;
+        return self.integrity > 0.8;
     }
 
     // durability: f32, // an abstraction of density, circumference & hardness. Influenced by species + individual traits.
@@ -101,7 +103,8 @@ pub const PartId = struct {
 
 pub const PartDef = struct {
     id: PartId,
-    parent: ?PartId,
+    parent: ?PartId, // attachment: arm → shoulder → torso
+    enclosing: ?PartId, // containment: heart → torso (must breach torso to reach heart)
     tag: PartTag,
     side: Side,
     name: []const u8,
@@ -119,20 +122,120 @@ pub const PartDef = struct {
 };
 
 pub const Body = struct {
+    alloc: std.mem.Allocator,
     parts: std.ArrayList(Part),
+    index_by_hash: std.AutoHashMap(u64, PartIndex), // name hash → part index
 
-    // Helper to find things
-    pub fn get_children(self: Body, parent: PartIndex) std.Iterator {
-        _ = .{ self, parent };
-        // TODO: implement
+    pub fn fromPlan(alloc: std.mem.Allocator, plan: []const PartDef) !Body {
+        var self = Body{
+            .alloc = alloc,
+            .parts = try std.ArrayList(Part).initCapacity(alloc, plan.len),
+            .index_by_hash = std.AutoHashMap(u64, PartIndex).init(alloc),
+        };
+        errdefer self.deinit();
+
+        try self.index_by_hash.ensureTotalCapacity(@intCast(plan.len));
+
+        // First pass: create parts and build hash→index map
+        for (plan, 0..) |def, i| {
+            const part = Part{
+                .name_hash = def.id.hash,
+                .def_index = @intCast(i),
+                .tag = def.tag,
+                .side = def.side,
+                .parent = null, // resolved in second pass
+                .enclosing = null, // resolved in second pass
+                .integrity = def.base_durability,
+                .wounds = std.ArrayList(Wound).init(alloc),
+                .is_severed = false,
+            };
+            try self.parts.append(alloc, part);
+            try self.index_by_hash.put(def.id.hash, @intCast(i));
+        }
+
+        // Second pass: resolve parent and enclosing references
+        for (plan, 0..) |def, i| {
+            if (def.parent) |parent_id| {
+                self.parts.items[i].parent = self.index_by_hash.get(parent_id.hash);
+            }
+            if (def.enclosing) |enclosing_id| {
+                self.parts.items[i].enclosing = self.index_by_hash.get(enclosing_id.hash);
+            }
+        }
+
+        return self;
     }
+
+    /// Look up a part by its name hash
+    pub fn getByHash(self: *const Body, hash: u64) ?*Part {
+        const index = self.index_by_hash.get(hash) orelse return null;
+        return &self.parts.items[index];
+    }
+
+    /// Look up a part by name (comptime)
+    pub fn get(self: *const Body, comptime name: []const u8) ?*Part {
+        return self.getByHash(PartId.init(name).hash);
+    }
+
+    /// Iterate over children of a part
+    pub fn getChildren(self: *const Body, parent: PartIndex) ChildIterator {
+        return ChildIterator{ .body = self, .parent = parent, .index = 0 };
+    }
+
+    /// Iterate over parts enclosed by another part
+    pub fn getEnclosed(self: *const Body, enclosing: PartIndex) EnclosedIterator {
+        return EnclosedIterator{ .body = self, .enclosing = enclosing, .index = 0 };
+    }
+
+    const ChildIterator = struct {
+        body: *const Body,
+        parent: PartIndex,
+        index: usize,
+
+        pub fn next(self: *ChildIterator) ?*Part {
+            while (self.index < self.body.parts.items.len) : (self.index += 1) {
+                const part = &self.body.parts.items[self.index];
+                if (part.parent == self.parent) {
+                    self.index += 1;
+                    return part;
+                }
+            }
+            return null;
+        }
+    };
+
+    const EnclosedIterator = struct {
+        body: *const Body,
+        enclosing: PartIndex,
+        index: usize,
+
+        pub fn next(self: *EnclosedIterator) ?*Part {
+            while (self.index < self.body.parts.items.len) : (self.index += 1) {
+                const part = &self.body.parts.items[self.index];
+                if (part.enclosing == self.enclosing) {
+                    self.index += 1;
+                    return part;
+                }
+            }
+            return null;
+        }
+    };
+
     pub fn init(alloc: std.mem.Allocator) !Body {
         return Body{
+            .alloc = alloc,
             .parts = try std.ArrayList(Part).initCapacity(alloc, 100),
+            .index_by_hash = std.AutoHashMap(u64, PartIndex).init(alloc),
         };
     }
-    pub fn deinit(self: *Body, alloc: std.mem.Allocator) void {
-        self.parts.deinit(alloc);
+
+    pub fn deinit(self: *Body) void {
+        // Free each part's wounds ArrayList
+        for (self.parts.items) |*part| {
+            part.wounds.deinit(self.alloc);
+        }
+        self.parts.deinit(self.alloc);
+        self.index_by_hash.deinit();
     }
 };
 
@@ -151,16 +254,44 @@ fn definePart(
     side: Side,
     comptime parent_name: ?[]const u8,
 ) PartDef {
+    return definePartFull(name, tag, side, parent_name, null, .{});
+}
+
+const PartFlags = @TypeOf(@as(PartDef, undefined).flags);
+
+fn definePartFull(
+    comptime name: []const u8,
+    tag: PartTag,
+    side: Side,
+    comptime parent_name: ?[]const u8,
+    comptime enclosing_name: ?[]const u8,
+    flags: PartFlags,
+) PartDef {
     return .{
         .id = PartId.init(name),
         .parent = if (parent_name) |p| PartId.init(p) else null,
+        .enclosing = if (enclosing_name) |e| PartId.init(e) else null,
         .tag = tag,
         .side = side,
         .name = name,
         .base_hit_chance = 1.0,
         .base_durability = 1.0,
         .trauma_mult = 1.0,
+        .flags = flags,
     };
+}
+
+fn defineOrgan(
+    comptime name: []const u8,
+    tag: PartTag,
+    side: Side,
+    comptime parent_name: []const u8,
+    comptime enclosing_name: []const u8,
+) PartDef {
+    return definePartFull(name, tag, side, parent_name, enclosing_name, .{
+        .is_vital = true,
+        .is_internal = true,
+    });
 }
 // to look up parts by ID at runtime, store a std.AutoHashMap(u64, PartIndex)
 // when building the body, using part.id.hash as the key.

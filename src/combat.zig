@@ -18,25 +18,6 @@ const Director = enum {
     ai,
 };
 
-// Per-entity (player or mob)
-pub const State = struct {
-
-    // Could also include:
-    // focus: f32,          // Attention split across engagements
-    // fatigue: f32,        // Accumulates across engagements
-    pub fn init(alloc: std.mem.Allocator, stamina: f32) !State {
-        return State{
-            .conditions = std.ArrayList(damage.Condition).initCapacity(alloc, 5),
-            .stamina = stamina,
-            .stamina_available = stamina,
-        };
-    }
-
-    pub fn deinit(self: State, alloc: std.mem.Allocator) void {
-        self.conditions.deinit(alloc);
-    }
-};
-
 pub const Reach = enum {
     far,
     medium,
@@ -120,14 +101,14 @@ pub const Agent = struct {
     director: Director,
     cards: Strat,
     stats: stats.Block,
-    engagement: ?combat.Engagement, // npc
+    engagement: ?combat.Engagement, // for NPCs only (relative to player)
     // may be humanoid, or not
     body: body.Body,
     // sourced from cards.equipped
     armour: armour.Stack,
     weapons: Armament,
 
-    // state
+    // state (wounds kept in body)
     balance: f32 = 1.0, // 0-1, intrinsic stability
     stamina: f32 = 0.0,
     stamina_available: f32 = 0.0,
@@ -152,7 +133,7 @@ pub const Agent = struct {
             .stats = sb,
             // .state = State.init(alloc, stamina),
             .body = bd,
-            .armour = armour.Stack{},
+            .armour =  undefined, //armour.Stack{.coverage = &.{}},
             .weapons = undefined,
             .engagement = (if (dr == .ai) Engagement{} else null),
             .stamina = stamina,
@@ -180,56 +161,6 @@ pub const Agent = struct {
         self.vulnerabilities.deinit(alloc);
     }
 };
-
-// pub const Mob = struct {
-//     wounds: f32 = 0,
-//     state: State,
-//     engagement: Engagement,
-//     stats: stats.Block,
-//
-//     // haxxx
-//     slot_map: SlotMap(*Instance),
-//     hand: std.ArrayList(*Instance),
-//     in_play: std.ArrayList(*Instance),
-//
-//     // fatigue: f32,  // attention split
-//     // focus: f32,    // cumulative
-//     pub fn init(alloc: std.mem.Allocator) !Mob {
-//         return Mob{
-//             .slot_map = try SlotMap(*Instance).init(alloc),
-//             .hand = try std.ArrayList(*Instance).initCapacity(alloc, 10),
-//             .in_play = try std.ArrayList(*Instance).initCapacity(alloc, 10),
-//             .wounds = 0,
-//             .state = State{
-//                 .balance = 1.0,
-//             },
-//             .engagement = Engagement{
-//                 .pressure = 0.5,
-//                 .control = 0.5,
-//                 .position = 0.5,
-//                 .range = .medium,
-//             },
-//             .stats = stats.Block.splat(5),
-//         };
-//     }
-//
-//     pub fn deinit(self: *Mob, alloc: std.mem.Allocator) void {
-//         std.debug.print("DEINIT MOB\n", .{});
-//         self.hand.deinit(alloc);
-//         for (self.in_play.items) |item| alloc.destroy(item);
-//         self.in_play.deinit(alloc);
-//         self.slot_map.deinit();
-//         alloc.destroy(self);
-//     }
-//
-//     pub fn play(self: *Mob, alloc: std.mem.Allocator, template: *const Template) !void {
-//         var instance = try alloc.create(Instance);
-//         instance.template = template;
-//         const id: entity.ID = try self.slot_map.insert(instance);
-//         instance.id = id;
-//         self.in_play.appendAssumeCapacity(instance);
-//     }
-// };
 
 // Per-engagement (one per mob, attached to mob)
 pub const Engagement = struct {
