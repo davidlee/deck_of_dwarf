@@ -3,7 +3,7 @@ const std = @import("std");
 const lib = @import("infra");
 const Event = @import("events.zig").Event;
 const EventTag = std.meta.Tag(Event); // std.meta.activeTag(event) for cmp
-const EntityID = @import("entity.zig").EntityID;
+const entity = @import("entity.zig");
 const damage = @import("damage.zig");
 const stats = @import("stats.zig");
 const body = @import("body.zig");
@@ -117,7 +117,7 @@ pub const Predicate = union(enum) {
 };
 
 pub const Selector = struct {
-    id: EntityID,
+    id: entity.ID,
 };
 
 pub const TargetQuery = union(enum) {
@@ -178,8 +178,8 @@ pub const Effect = union(enum) {
     move_card: struct { from: Zone, to: Zone },
     add_condition: damage.Condition,
     remove_condition: damage.Condition,
-    exhaust_card: EntityID,
-    return_exhausted_card: EntityID,
+    exhaust_card: entity.ID,
+    return_exhausted_card: entity.ID,
     interrupt,
     emit_event: Event,
 };
@@ -218,7 +218,7 @@ pub const Template = struct {
 };
 
 pub const Instance = struct {
-    id: EntityID,
+    id: entity.ID,
     template: *const Template,
 };
 

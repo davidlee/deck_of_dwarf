@@ -1,5 +1,5 @@
 const std = @import("std");
-const EntityID = @import("entity.zig").EntityID;
+const entity = @import("entity.zig");
 const RandomStreamID = @import("random.zig").RandomStreamID;
 const Slot = void; // TODO what's this look like?
 const deck = @import("deck.zig");
@@ -7,12 +7,12 @@ const cards = @import("cards.zig");
 const world = @import("world.zig");
 const Zone = cards.Zone;
 pub const CardWithSlot = struct {
-    card: EntityID,
+    card: entity.ID,
     slot: Slot,
 };
 
 pub const CardWithEvent = struct {
-    card: EntityID,
+    card: entity.ID,
     event_index: usize, // in the EventSystem.current_events queue - must exist
 };
 
@@ -24,10 +24,10 @@ pub const RandomWithMeta = struct {
 // tagged union: events
 pub const Event = union(enum) {
     entity_died: u32, // Payload: just the ID
-    mob_died: EntityID,
+    mob_died: entity.ID,
 
-    played_action_card: struct { instance: EntityID, template: u64 },
-    card_moved: struct { instance: EntityID, from: Zone, to: Zone },
+    played_action_card: struct { instance: entity.ID, template: u64 },
+    card_moved: struct { instance: entity.ID, from: Zone, to: Zone },
 
     game_state_transitioned_to: world.GameState,
 

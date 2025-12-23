@@ -1,6 +1,5 @@
 const std = @import("std");
 const Event = @import("events.zig").Event;
-const EntityID = @import("entity.zig").EntityID;
 
 const cards = @import("cards.zig");
 const damage = @import("damage.zig");

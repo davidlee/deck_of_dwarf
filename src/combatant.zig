@@ -2,8 +2,8 @@ const std = @import("std");
 const body = @import("body.zig");
 const stats = @import("stats.zig");
 const cards = @import("cards.zig");
+const entity = @import("entity.zig");
 
-const EntityID = @import("entity.zig").EntityID;
 const SlotMap = @import("slot_map.zig").SlotMap;
 const Instance = cards.Instance;
 const Template = cards.Template;
@@ -21,7 +21,7 @@ pub const Mob = struct {
 
     // fatigue: f32,  // attention split
     // focus: f32,    // cumulative
-    pub fn init(alloc: std.mem.Allocator) !Mob { 
+    pub fn init(alloc: std.mem.Allocator) !Mob {
         return Mob{
             .slot_map = try SlotMap(*Instance).init(alloc),
             .hand = try std.ArrayList(*Instance).initCapacity(alloc, 10),
@@ -41,7 +41,7 @@ pub const Mob = struct {
     }
 
     pub fn deinit(self: *Mob, alloc: std.mem.Allocator) void {
-        std.debug.print("DEINIT MOB\n",.{});
+        std.debug.print("DEINIT MOB\n", .{});
         self.hand.deinit(alloc);
         for (self.in_play.items) |item| alloc.destroy(item);
         self.in_play.deinit(alloc);
@@ -52,7 +52,7 @@ pub const Mob = struct {
     pub fn play(self: *Mob, alloc: std.mem.Allocator, template: *const Template) !void {
         var instance = try alloc.create(Instance);
         instance.template = template;
-        const id: EntityID = try self.slot_map.insert(instance);
+        const id: entity.ID = try self.slot_map.insert(instance);
         instance.id = id;
         self.in_play.appendAssumeCapacity(instance);
     }

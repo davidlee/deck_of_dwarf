@@ -1,12 +1,14 @@
 /// Combat resolves encounters, implements the pipelines which apply player
 /// stats & equipment to cards / moves, applies damage, etc.
-/// 
+///
 const std = @import("std");
-const lib = @import("infra"); 
-const Event = @import("events.zig").Event; const
-EventTag = std.meta.Tag(Event);
-
-const EntityID = @import("entity.zig").EntityID; 
+const lib = @import("infra");
+const armour = @import("armour.zig");
+const weapon = @import("weapon.zig");
+const combatant = @import("combatant.zig");
 const damage = @import("damage.zig");
 const stats = @import("stats.zig");
-const World = @import("world.zig").World;
+const body = @import("body.zig");
+const deck = @import("deck.zig");
+const cards = @import("cards.zig");
+

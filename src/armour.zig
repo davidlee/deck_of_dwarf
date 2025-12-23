@@ -2,21 +2,29 @@ const body = @import("body.zig");
 const damage = @import("damage.zig");
 const inventory = @import("inventory.zig");
 
-const Resistance = struct {
-    kind: damage.Kind,
-    // protective effect on wearer
-    threshold: f32 = 0.0, // no damage below this number
-    ratio: f32 = 0.0, // multiply remainder
+const Resistance = damage.Resistance;
+const Vulnerability = damage.Vulnerability;
 
-    // models wear / destruction of armour
-    self_theshold: f32, // no armour damage below this number
-    self_ratio: f32, // multiply remainder
+const Quality = enum {
+    terrible,
+    poor,
+    common,
+    excellent,
+    masterwork,
 };
 
 const Material = struct {
     name: []const u8,
 
+    // these modify to the wearer
     resistances: []Resistance,
+    vulnerabilities: []Vulnerability,
+
+    // these modify to the material itself
+    self_resistances: []Resistance,
+    self_vulnerabilities: []Vulnerability,
+
+    quality: Quality,
     durability: f32, // base - modified by size, quality, etc
 };
 
@@ -47,7 +55,6 @@ const ConstructionLayer = struct {
     layer: inventory.Layer,
 };
 
-
 // pub const Layer = struct {
 //     part_tags: []const body.PartTag,
 //     layer: inventory.Layer,
@@ -59,3 +66,6 @@ const Construction = struct {
     name: []const u8,
     // layers: Layer,
 };
+
+// all armour as worn, with precomputed values
+const Stack = struct {};

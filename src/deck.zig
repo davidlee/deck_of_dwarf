@@ -7,7 +7,7 @@ const card_list = @import("card_list.zig");
 const slot_map = @import("slot_map.zig");
 const events = @import("events.zig");
 
-const EntityID = @import("entity.zig").EntityID;
+const entity = @import("entity.zig");
 const World = @import("world.zig").World;
 const Instance = cards.Instance;
 const Event = events.Event;
@@ -24,17 +24,21 @@ const DeckError = error{
 
 pub const Deck = struct {
     alloc: std.mem.Allocator,
-    entities: SlotMap(*Instance), // EntityID provider
-    draw: std.ArrayList(*Instance), // draw pile
-    hand: std.ArrayList(*Instance), // (player) hand
-    discard: std.ArrayList(*Instance), // (player) hand
-    in_play: std.ArrayList(*Instance), // exhausted cards
-    equipped: std.ArrayList(*Instance), // exhausted cards
-    inventory: std.ArrayList(*Instance), // exhausted cards
-    exhaust: std.ArrayList(*Instance), // exhausted cards
+    entities: SlotMap(*Instance), // entity.ID provider
+
+    // card piles
+    draw: std.ArrayList(*Instance),
+    hand: std.ArrayList(*Instance),
+    discard: std.ArrayList(*Instance),
+    in_play: std.ArrayList(*Instance),
+    equipped: std.ArrayList(*Instance),
+    inventory: std.ArrayList(*Instance),
+    exhaust: std.ArrayList(*Instance),
+
+    // FIXME move these out
     techniques: std.StringHashMap(*const cards.Technique),
 
-    fn moveInternal(self: *Deck, id: EntityID, from: *std.ArrayList(*Instance), to: *std.ArrayList(*Instance)) !void {
+    fn moveInternal(self: *Deck, id: entity.ID, from: *std.ArrayList(*Instance), to: *std.ArrayList(*Instance)) !void {
         const i = try Deck.find(id, from);
         const instance = from.orderedRemove(i);
         try to.append(self.alloc, instance);
@@ -52,7 +56,7 @@ pub const Deck = struct {
         };
     }
 
-    fn find(id: EntityID, pile: *std.ArrayList(*Instance)) !usize {
+    fn find(id: entity.ID, pile: *std.ArrayList(*Instance)) !usize {
         var i: usize = 0;
         while (i < pile.items.len) : (i += 1) {
             const card = pile.items[i];
@@ -66,7 +70,7 @@ pub const Deck = struct {
         // std.debug.print("insert: {s}", .{template.name});
         instance.template = template;
         // std.debug.print(" -- insert: {s}\n", .{instance.template.name});
-        const id: EntityID = try self.entities.insert(instance);
+        const id: entity.ID = try self.entities.insert(instance);
         instance.id = id;
         return instance;
     }
@@ -138,11 +142,11 @@ pub const Deck = struct {
         self.techniques.deinit();
     }
 
-    pub fn move(self: *Deck, id: EntityID, from: Zone, to: Zone) !void {
+    pub fn move(self: *Deck, id: entity.ID, from: Zone, to: Zone) !void {
         try self.moveInternal(id, self.pileForZone(from), self.pileForZone(to));
     }
 
-    pub fn instanceInZone(self: *Deck, id: EntityID, zone: Zone) bool {
+    pub fn instanceInZone(self: *Deck, id: entity.ID, zone: Zone) bool {
         _ = Deck.find(id, self.pileForZone(zone)) catch return false;
         return true;
     }

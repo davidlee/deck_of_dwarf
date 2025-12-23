@@ -1,5 +1,6 @@
 const combatant = @import("combatant.zig");
 const damage = @import("damage.zig");
+const entity = @import("entity.zig");
 
 pub const ProjectileType = enum {
     arrow,
@@ -124,4 +125,11 @@ pub const Template = struct {
     ranged: ?Ranged,
 
     integrity: f32, // total damage until broken
+};
+
+pub const Instance = struct {
+    id: entity.ID,
+    template: *const Template,
+
+    // custom stuff here ..
 };

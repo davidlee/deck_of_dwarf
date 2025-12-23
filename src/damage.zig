@@ -1,10 +1,45 @@
 const std = @import("std");
 const lib = @import("infra");
-const BodyPartTag = @import("body.zig").BodyPartTag;
+const PartTag = @import("body.zig").PartTag;
 const Scaling = @import("stats.zig").Scaling;
 
-// DoT are separate 
-// 
+const Immunity = union(enum) {
+    condition: Condition,
+    damage: Kind,
+    // dot_effect
+    // magic / etc
+};
+
+const Resistance = struct {
+    damage: Kind,
+
+    threshold: f32, // no damage below this number
+    ratio: f32, // multiplier for remainder
+};
+
+const Vulnerability = struct {
+    damage: Kind,
+    ratio: f32,
+    // maybe: threshold -> trigger (DoT / Effect / Special ..)
+};
+
+const Susceptibility = struct {
+    condition: Condition,
+    // trigger: null, // TODO:
+};
+
+pub const TemporaryCondition = struct {
+    condition: Condition,
+    time_remaining: f32,
+    // todo: conditions like recovering stamina / advantage, etc
+    // random chance per tick
+    // on_remove: null,  // TODO: function - check for sepsis, apply lesser condition, etc
+};
+
+// pub const Trigger = union(enum) { };
+
+// DoT are separate
+//
 pub const Condition = enum {
     blinded,
     deafened,
@@ -20,7 +55,7 @@ pub const Condition = enum {
     surprised,
     unconscious,
     comatose,
-    asphyxiating, // Open question: not DoT because the intensity is creature specific, not part of the effect 
+    asphyxiating, // Open question: not DoT because the intensity is creature specific, not part of the effect
     starving,
     dehydrating,
     exhausted,

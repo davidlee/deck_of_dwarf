@@ -7,12 +7,12 @@ const cards = @import("cards.zig");
 const card_list = @import("card_list.zig");
 const combatant = @import("combatant.zig");
 const events = @import("events.zig");
+const world = @import("world.zig");
+const entity = @import("entity.zig");
 
 const Event = events.Event;
 const EventSystem = events.EventSystem;
 const EventTag = std.meta.Tag(Event);
-const EntityID = @import("entity.zig").EntityID;
-const world = @import("world.zig");
 const World = world.World;
 const Player = @import("player.zig").Player;
 const Mob = combatant.Mob;
