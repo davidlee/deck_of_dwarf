@@ -97,6 +97,7 @@ pub const Part = struct {
 pub const PartId = struct {
     hash: u64,
     pub fn init(comptime name: []const u8) PartId {
+        @setEvalBranchQuota(10000);
         return .{ .hash = std.hash.Wyhash.hash(0, name) };
     }
 };
@@ -146,7 +147,7 @@ pub const Body = struct {
                 .parent = null, // resolved in second pass
                 .enclosing = null, // resolved in second pass
                 .integrity = def.base_durability,
-                .wounds = std.ArrayList(Wound).init(alloc),
+                .wounds = try std.ArrayList(Wound).initCapacity(alloc, 0),
                 .is_severed = false,
             };
             try self.parts.append(alloc, part);

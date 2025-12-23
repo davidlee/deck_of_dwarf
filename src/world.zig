@@ -56,7 +56,7 @@ pub const World = struct {
 
         const playerDeck = try Deck.init(alloc, &BeginnerDeck);
         const playerStats = stats.Block.splat(5);
-        const playerBody = try body.Body.init(alloc);
+        const playerBody = try body.Body.fromPlan(alloc, &body.HumanoidPlan);
 
         const self = try alloc.create(World);
         self.* = .{
