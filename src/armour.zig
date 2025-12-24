@@ -2,7 +2,10 @@ const std = @import("std");
 const body = @import("body.zig");
 const damage = @import("damage.zig");
 const entity = @import("entity.zig");
+const events = @import("events.zig");
 const inventory = @import("inventory.zig");
+const random = @import("random.zig");
+const world = @import("world.zig");
 
 const Resistance = damage.Resistance;
 const Vulnerability = damage.Vulnerability;
@@ -217,16 +220,21 @@ fn resolvePartIndex(bod: *const body.Body, tag: body.PartTag, side: body.Side) ?
     return null;
 }
 
-/// Result of armor absorbing damage
+/// Result of armour absorbing damage
 pub const AbsorptionResult = struct {
     remaining: damage.Packet, // damage that reached the body
-    gap_found: bool, // attack bypassed armor entirely
-    layers_hit: u8, // number of armor layers damaged
+    gap_found: bool, // attack bypassed armour entirely
+    layers_hit: u8, // number of armour layers damaged
+    deflected: bool, // hardness deflection stopped the attack
+    deflected_at_layer: ?u8, // which layer deflected (if any)
+    layers_destroyed: u8, // layers that hit 0 integrity this resolution
 };
 
-/// Process a damage packet through armor layers, returning what reaches the body.
-/// Mutates layer integrity as armor is damaged.
-pub fn resolveThroughArmor(
+/// Process a damage packet through armour layers, returning what reaches the body.
+/// Mutates layer integrity as armour is damaged.
+/// NOTE: For production use resolveThroughArmourWithEvents which uses World.drawRandom
+/// and emits events. This function is public for testing with controlled RNG.
+pub fn resolveThroughArmour(
     stack: *const Stack,
     part_idx: body.PartIndex,
     packet: damage.Packet,
@@ -234,6 +242,9 @@ pub fn resolveThroughArmor(
 ) AbsorptionResult {
     var remaining = packet;
     var layers_hit: u8 = 0;
+    var deflected = false;
+    var deflected_at_layer: ?u8 = null;
+    var layers_destroyed: u8 = 0;
     const protection = stack.getProtection(part_idx);
 
     // Process layers outer to inner (Cloak=8 down to Skin=0)
@@ -242,8 +253,10 @@ pub fn resolveThroughArmor(
         layer_idx -= 1;
         const layer = protection[layer_idx] orelse continue;
 
-        // Skip destroyed armor
+        // Skip destroyed armour
         if (layer.integrity.* <= 0) continue;
+
+        const integrity_before = layer.integrity.*;
 
         // Gap check - attack might find a hole
         if (rng.float(f32) < layer.totality.gapChance()) {
@@ -254,18 +267,26 @@ pub fn resolveThroughArmor(
 
         // Hardness check - glancing blow deflection
         if (rng.float(f32) < layer.material.hardness) {
-            // Deflected - minimal damage to armor, attack stopped
+            // Deflected - minimal damage to armour, attack stopped
             layer.integrity.* -= remaining.amount * 0.1;
             remaining.amount = 0;
+            deflected = true;
+            deflected_at_layer = @intCast(layer_idx);
+            if (integrity_before > 0 and layer.integrity.* <= 0) {
+                layers_destroyed += 1;
+            }
             break;
         }
 
         // Material resistance reduces damage
         const resistance = getMaterialResistance(layer.material, remaining.kind);
         if (remaining.amount < resistance.threshold) {
-            // Below threshold - no penetration, minor armor wear
+            // Below threshold - no penetration, minor armour wear
             layer.integrity.* -= remaining.amount * 0.05;
             remaining.amount = 0;
+            if (integrity_before > 0 and layer.integrity.* <= 0) {
+                layers_destroyed += 1;
+            }
             break;
         }
 
@@ -273,8 +294,11 @@ pub fn resolveThroughArmor(
         const effective_damage = (remaining.amount - resistance.threshold) * resistance.ratio;
         const absorbed = remaining.amount - effective_damage;
 
-        // Armor takes damage
+        // Armour takes damage
         layer.integrity.* -= absorbed * 0.5;
+        if (integrity_before > 0 and layer.integrity.* <= 0) {
+            layers_destroyed += 1;
+        }
 
         // Penetration reduced by thickness
         remaining.penetration -= layer.material.thickness;
@@ -293,6 +317,134 @@ pub fn resolveThroughArmor(
         .remaining = remaining,
         .gap_found = layers_hit == 0 and remaining.amount > 0,
         .layers_hit = layers_hit,
+        .deflected = deflected,
+        .deflected_at_layer = deflected_at_layer,
+        .layers_destroyed = layers_destroyed,
+    };
+}
+
+/// Production wrapper: resolves armour using World.drawRandom and emits events.
+pub fn resolveThroughArmourWithEvents(
+    w: *world.World,
+    agent_id: entity.ID,
+    stack: *const Stack,
+    part_idx: body.PartIndex,
+    packet: damage.Packet,
+) !AbsorptionResult {
+    var remaining = packet;
+    var layers_hit: u8 = 0;
+    var deflected = false;
+    var deflected_at_layer: ?u8 = null;
+    var layers_destroyed: u8 = 0;
+    const protection = stack.getProtection(part_idx);
+    const initial_amount = packet.amount;
+
+    // Process layers outer to inner (Cloak=8 down to Skin=0)
+    var layer_idx: usize = 9;
+    while (layer_idx > 0) {
+        layer_idx -= 1;
+        const layer = protection[layer_idx] orelse continue;
+
+        if (layer.integrity.* <= 0) continue;
+
+        const integrity_before = layer.integrity.*;
+        const layer_u8: u8 = @intCast(layer_idx);
+
+        // Gap check
+        const gap_roll = try w.drawRandom(.combat);
+        if (gap_roll < layer.totality.gapChance()) {
+            try w.events.push(.{ .attack_found_gap = .{
+                .agent_id = agent_id,
+                .part_idx = part_idx,
+                .layer = layer_u8,
+            } });
+            continue;
+        }
+
+        layers_hit += 1;
+
+        // Hardness check
+        const hardness_roll = try w.drawRandom(.combat);
+        if (hardness_roll < layer.material.hardness) {
+            layer.integrity.* -= remaining.amount * 0.1;
+            remaining.amount = 0;
+            deflected = true;
+            deflected_at_layer = layer_u8;
+
+            try w.events.push(.{ .armour_deflected = .{
+                .agent_id = agent_id,
+                .part_idx = part_idx,
+                .layer = layer_u8,
+            } });
+
+            if (integrity_before > 0 and layer.integrity.* <= 0) {
+                layers_destroyed += 1;
+                try w.events.push(.{ .armour_layer_destroyed = .{
+                    .agent_id = agent_id,
+                    .part_idx = part_idx,
+                    .layer = layer_u8,
+                } });
+            }
+            break;
+        }
+
+        const resistance = getMaterialResistance(layer.material, remaining.kind);
+        if (remaining.amount < resistance.threshold) {
+            layer.integrity.* -= remaining.amount * 0.05;
+            remaining.amount = 0;
+            if (integrity_before > 0 and layer.integrity.* <= 0) {
+                layers_destroyed += 1;
+                try w.events.push(.{ .armour_layer_destroyed = .{
+                    .agent_id = agent_id,
+                    .part_idx = part_idx,
+                    .layer = layer_u8,
+                } });
+            }
+            break;
+        }
+
+        const effective_damage = (remaining.amount - resistance.threshold) * resistance.ratio;
+        const absorbed = remaining.amount - effective_damage;
+
+        layer.integrity.* -= absorbed * 0.5;
+        if (integrity_before > 0 and layer.integrity.* <= 0) {
+            layers_destroyed += 1;
+            try w.events.push(.{ .armour_layer_destroyed = .{
+                .agent_id = agent_id,
+                .part_idx = part_idx,
+                .layer = layer_u8,
+            } });
+        }
+
+        remaining.penetration -= layer.material.thickness;
+        remaining.amount = effective_damage;
+
+        if (remaining.penetration <= 0 and
+            (remaining.kind == .pierce or remaining.kind == .slash))
+        {
+            remaining.amount = 0;
+            break;
+        }
+    }
+
+    // Emit summary event if armour absorbed any damage
+    if (layers_hit > 0) {
+        const damage_reduced = initial_amount - remaining.amount;
+        try w.events.push(.{ .armour_absorbed = .{
+            .agent_id = agent_id,
+            .part_idx = part_idx,
+            .damage_reduced = damage_reduced,
+            .layers_hit = layers_hit,
+        } });
+    }
+
+    return .{
+        .remaining = remaining,
+        .gap_found = layers_hit == 0 and remaining.amount > 0,
+        .layers_hit = layers_hit,
+        .deflected = deflected,
+        .deflected_at_layer = deflected_at_layer,
+        .layers_destroyed = layers_destroyed,
     };
 }
 
@@ -646,7 +798,7 @@ test "Stack.getProtection returns empty for unarmored part" {
     }
 }
 
-test "resolveThroughArmor: gap found bypasses layer" {
+test "resolveThroughArmour: gap found bypasses layer" {
     const alloc = std.testing.allocator;
 
     // Create a minimal armor pattern with .minimal totality (50% gap chance)
@@ -690,7 +842,7 @@ test "resolveThroughArmor: gap found bypasses layer" {
         // Reset armor integrity for each attempt
         armor.coverage[0].integrity = TestMaterials.plate.durability * Quality.excellent.durabilityMult();
 
-        const result = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+        const result = resolveThroughArmour(&stack, torso_idx, packet, &rng);
         if (result.gap_found) {
             found_gap = true;
             // Damage should pass through unchanged
@@ -702,7 +854,7 @@ test "resolveThroughArmor: gap found bypasses layer" {
     try std.testing.expect(found_gap);
 }
 
-test "resolveThroughArmor: hardness deflects attack" {
+test "resolveThroughArmour: hardness deflects attack" {
     const alloc = std.testing.allocator;
 
     // Plate has hardness = 0.8, totality = .intimidating (5% gap)
@@ -743,7 +895,7 @@ test "resolveThroughArmor: hardness deflects attack" {
         var rng = prng.random();
 
         const initial_integrity = armor.coverage[0].integrity;
-        const result = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+        const result = resolveThroughArmour(&stack, torso_idx, packet, &rng);
 
         // If deflected: amount=0, layers_hit=1, minor armor damage
         if (result.remaining.amount == 0 and result.layers_hit == 1) {
@@ -759,7 +911,7 @@ test "resolveThroughArmor: hardness deflects attack" {
     }
 }
 
-test "resolveThroughArmor: resistance threshold blocks weak attacks" {
+test "resolveThroughArmour: resistance threshold blocks weak attacks" {
     const alloc = std.testing.allocator;
 
     // Plate has slash threshold=0.5 - attacks below this are blocked
@@ -814,7 +966,7 @@ test "resolveThroughArmor: resistance threshold blocks weak attacks" {
     var rng = prng.random();
 
     const initial_integrity = armor.coverage[0].integrity;
-    const result = resolveThroughArmor(&stack, torso_idx, weak_packet, &rng);
+    const result = resolveThroughArmour(&stack, torso_idx, weak_packet, &rng);
 
     // Attack blocked
     try std.testing.expectEqual(@as(f32, 0), result.remaining.amount);
@@ -826,7 +978,7 @@ test "resolveThroughArmor: resistance threshold blocks weak attacks" {
     try std.testing.expect(integrity_loss <= weak_packet.amount * 0.1);
 }
 
-test "resolveThroughArmor: damage reduction applies correctly" {
+test "resolveThroughArmour: damage reduction applies correctly" {
     const alloc = std.testing.allocator;
 
     // Material with threshold=0.1, ratio=0.7 for pierce (mail)
@@ -881,13 +1033,13 @@ test "resolveThroughArmor: damage reduction applies correctly" {
     var prng = testRng(42);
     var rng = prng.random();
 
-    const result = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+    const result = resolveThroughArmour(&stack, torso_idx, packet, &rng);
 
     const expected = (1.0 - 0.1) * 0.7;
     try std.testing.expectApproxEqAbs(expected, result.remaining.amount, 0.01);
 }
 
-test "resolveThroughArmor: penetration reduced by thickness" {
+test "resolveThroughArmour: penetration reduced by thickness" {
     const alloc = std.testing.allocator;
 
     // Mail has thickness=0.5
@@ -928,7 +1080,7 @@ test "resolveThroughArmor: penetration reduced by thickness" {
         var rng = prng.random();
         armor.coverage[0].integrity = TestMaterials.mail.durability;
 
-        const result = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+        const result = resolveThroughArmour(&stack, torso_idx, packet, &rng);
 
         // If damage got through (not deflected)
         if (result.remaining.amount > 0) {
@@ -939,7 +1091,7 @@ test "resolveThroughArmor: penetration reduced by thickness" {
     }
 }
 
-test "resolveThroughArmor: pierce stops when penetration exhausted" {
+test "resolveThroughArmour: pierce stops when penetration exhausted" {
     const alloc = std.testing.allocator;
 
     // Use thick material (thickness=1.0)
@@ -991,14 +1143,14 @@ test "resolveThroughArmor: pierce stops when penetration exhausted" {
     var prng = testRng(42);
     var rng = prng.random();
 
-    const result = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+    const result = resolveThroughArmour(&stack, torso_idx, packet, &rng);
 
     // Penetration exhausted, attack stopped
     try std.testing.expectEqual(@as(f32, 0), result.remaining.amount);
     try std.testing.expect(result.remaining.penetration <= 0);
 }
 
-test "resolveThroughArmor: bludgeon ignores penetration" {
+test "resolveThroughArmour: bludgeon ignores penetration" {
     const alloc = std.testing.allocator;
 
     const solid_pattern = Pattern{
@@ -1049,13 +1201,13 @@ test "resolveThroughArmor: bludgeon ignores penetration" {
     var prng = testRng(42);
     var rng = prng.random();
 
-    const result = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+    const result = resolveThroughArmour(&stack, torso_idx, packet, &rng);
 
     // Bludgeon should get through based on amount, not penetration
     try std.testing.expect(result.remaining.amount > 0);
 }
 
-test "resolveThroughArmor: destroyed layers skipped" {
+test "resolveThroughArmour: destroyed layers skipped" {
     const alloc = std.testing.allocator;
 
     const solid_pattern = Pattern{
@@ -1093,14 +1245,14 @@ test "resolveThroughArmor: destroyed layers skipped" {
     var prng = testRng(42);
     var rng = prng.random();
 
-    const result = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+    const result = resolveThroughArmour(&stack, torso_idx, packet, &rng);
 
     // Destroyed layer skipped - damage passes through, no layers hit
     try std.testing.expectEqual(@as(u8, 0), result.layers_hit);
     try std.testing.expectEqual(packet.amount, result.remaining.amount);
 }
 
-test "resolveThroughArmor: multiple layers processed outer to inner" {
+test "resolveThroughArmour: multiple layers processed outer to inner" {
     const alloc = std.testing.allocator;
 
     // Create two armor pieces at different layers
@@ -1131,7 +1283,7 @@ test "resolveThroughArmor: multiple layers processed outer to inner" {
         gambeson.coverage[0].integrity = TestMaterials.cloth.durability;
         mail_shirt.coverage[0].integrity = TestMaterials.mail.durability;
 
-        const result = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+        const result = resolveThroughArmour(&stack, torso_idx, packet, &rng);
 
         if (result.layers_hit >= 2) {
             // Both layers were processed
@@ -1143,7 +1295,7 @@ test "resolveThroughArmor: multiple layers processed outer to inner" {
     }
 }
 
-test "resolveThroughArmor: layer integrity degrades" {
+test "resolveThroughArmour: layer integrity degrades" {
     const alloc = std.testing.allocator;
 
     const solid_pattern = Pattern{
@@ -1196,7 +1348,7 @@ test "resolveThroughArmor: layer integrity degrades" {
     var prng = testRng(42);
     var rng = prng.random();
 
-    _ = resolveThroughArmor(&stack, torso_idx, packet, &rng);
+    _ = resolveThroughArmour(&stack, torso_idx, packet, &rng);
 
     // Integrity should have decreased
     try std.testing.expect(armor.coverage[0].integrity < initial_integrity);
@@ -1263,7 +1415,7 @@ test "full flow: armor absorption then body damage" {
     var prng = testRng(42);
     var rng = prng.random();
 
-    const armor_result = resolveThroughArmor(&stack, torso_idx, initial_packet, &rng);
+    const armor_result = resolveThroughArmour(&stack, torso_idx, initial_packet, &rng);
 
     // Damage should be reduced: (1.0 - 0.2) * 0.5 = 0.4
     const expected_remaining = (1.0 - 0.2) * 0.5;

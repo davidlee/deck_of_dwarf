@@ -52,6 +52,30 @@ pub const Event = union(enum) {
         agent_id: entity.ID,
         part_idx: body.PartIndex,
     },
+
+    // Armour events
+    armour_deflected: struct {
+        agent_id: entity.ID,
+        part_idx: body.PartIndex,
+        layer: u8, // inventory.Layer as int
+    },
+    armour_absorbed: struct {
+        agent_id: entity.ID,
+        part_idx: body.PartIndex,
+        damage_reduced: f32,
+        layers_hit: u8,
+    },
+    armour_layer_destroyed: struct {
+        agent_id: entity.ID,
+        part_idx: body.PartIndex,
+        layer: u8,
+    },
+    attack_found_gap: struct {
+        agent_id: entity.ID,
+        part_idx: body.PartIndex,
+        layer: u8,
+    },
+
     played_reaction: CardWithEvent,
 
     equipped_item: CardWithSlot,
