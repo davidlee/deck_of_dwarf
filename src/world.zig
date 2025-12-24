@@ -90,7 +90,9 @@ pub const World = struct {
         if (self.encounter) |*encounter| {
             encounter.deinit(self.alloc);
         }
+        for(self.agents.items.items) |x| x.deinit();
         self.agents.deinit();
+        self.alloc.destroy(self.agents);
         self.alloc.destroy(self);
     }
 
