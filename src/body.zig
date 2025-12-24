@@ -1,8 +1,15 @@
 const std = @import("std");
-const DamageKind = @import("damage.zig").Kind;
+const damage = @import("damage.zig");
+const DamageKind = damage.Kind;
 
 pub const PartIndex = u16; // Up to 65k body parts is enough
 pub const NO_PARENT = std.math.maxInt(PartIndex);
+
+// Still TODO:
+// - Severing logic (when bone+muscle reach thresholds)
+// - Major artery hits → bleeding
+// - Attaching wounds to parts and updating Part.severity
+// - Integration with armor stack
 
 // const Tag = PartTag;
 pub const PartTag = enum {
@@ -59,20 +66,45 @@ pub const Side = enum(u8) {
     none,
 };
 
-pub const TissueLayer = enum { organ, cartilage, bone, tendon, artery, vein, muscle, fat, nerve, skin };
-
-pub const structural_layers = []TissueLayer{
-    .bone,
-    .artery,
-    .vein,
-    .muscle,
-    .tendon,
-    .fat,
-    .nerve,
-    .skin,
+pub const TissueLayer = enum {
+    organ,
+    cartilage,
+    bone,
+    tendon,
+    muscle,
+    fat,
+    nerve,
+    skin,
+    // Note: arteries/veins handled via has_major_artery flag on PartDef.
+    // All parts have capillaries (minor bleed); major vessels are site-specific.
 };
-pub const organ_layers = []TissueLayer{.organ};
-pub const facial_feature_layers = []TissueLayer{ .cartilage, .fat, .skin };
+
+pub const TissueTemplate = enum {
+    limb, // bone, muscle, tendon, fat, nerve, skin
+    digit, // bone, tendon, skin (minimal soft tissue)
+    joint, // bone, tendon, fat, skin
+    facial, // cartilage, fat, skin (no bone)
+    organ, // organ tissue only
+    core, // bone, muscle, fat, skin (torso/head - encloses organs)
+
+    pub fn layers(self: TissueTemplate) []const TissueLayer {
+        return switch (self) {
+            .limb => &.{ .bone, .muscle, .tendon, .fat, .nerve, .skin },
+            .digit => &.{ .bone, .tendon, .skin },
+            .joint => &.{ .bone, .tendon, .fat, .skin },
+            .facial => &.{ .cartilage, .fat, .skin },
+            .organ => &.{.organ},
+            .core => &.{ .bone, .muscle, .fat, .skin },
+        };
+    }
+
+    pub fn has(self: TissueTemplate, layer: TissueLayer) bool {
+        for (self.layers()) |l| {
+            if (l == layer) return true;
+        }
+        return false;
+    }
+};
 
 pub const Part = struct {
     name_hash: u64, // hash of name for runtime lookups
@@ -82,12 +114,48 @@ pub const Part = struct {
     parent: ?PartIndex, // attachment hierarchy (arm → shoulder)
     enclosing: ?PartIndex, // containment (heart → torso)
     flags: PartDef.Flags, // capability flags copied from def
+    tissue: TissueTemplate, // tissue composition
+    has_major_artery: bool, // major blood vessel present
 
-    integrity: f32, // destroyed at 0.0
+    severity: Severity, // overall part damage state
     wounds: std.ArrayList(Wound),
-    is_severed: bool, // If true, all children are implicitly disconnected
+    is_severed: bool, // physically detached; all children implicitly disconnected
     // Note: capability checks (can_grasp, can_stand, etc) are on Body, not Part,
     // because they require tree traversal for chain integrity.
+
+    /// Compute part severity from accumulated wound damage.
+    /// Uses structural layer (bone/cartilage) as primary indicator.
+    pub fn computeSeverity(self: *const Part) Severity {
+        var worst_structural: Severity = .none;
+        var worst_any: Severity = .none;
+
+        for (self.wounds.items) |wound| {
+            for (wound.slice()) |ld| {
+                // Track worst across all layers
+                if (@intFromEnum(ld.severity) > @intFromEnum(worst_any)) {
+                    worst_any = ld.severity;
+                }
+                // Track worst in structural layers (bone, cartilage)
+                if (ld.layer == .bone or ld.layer == .cartilage) {
+                    if (@intFromEnum(ld.severity) > @intFromEnum(worst_structural)) {
+                        worst_structural = ld.severity;
+                    }
+                }
+            }
+        }
+
+        // Structural damage dominates, but severe soft tissue damage matters too
+        // e.g., muscle at .broken with bone at .minor → part is impaired
+        if (@intFromEnum(worst_structural) >= @intFromEnum(worst_any)) {
+            return worst_structural;
+        }
+        // Soft tissue damage can't exceed structural by more than one step
+        // (you can't have a "broken" part if bone is fine)
+        const structural_int = @intFromEnum(worst_structural);
+        const any_int = @intFromEnum(worst_any);
+        const capped = @min(any_int, structural_int + 2);
+        return @enumFromInt(capped);
+    }
 };
 
 pub const PartId = struct {
@@ -118,6 +186,8 @@ pub const PartDef = struct {
     base_durability: f32,
     trauma_mult: f32,
     flags: Flags = .{},
+    tissue: TissueTemplate = .limb,
+    has_major_artery: bool = false, // neck, groin, armpit, inner thigh
 };
 
 pub const Body = struct {
@@ -145,7 +215,9 @@ pub const Body = struct {
                 .parent = null, // resolved in second pass
                 .enclosing = null, // resolved in second pass
                 .flags = def.flags,
-                .integrity = 1.0, // start at full health (durability is for damage calc)
+                .tissue = def.tissue,
+                .has_major_artery = def.has_major_artery,
+                .severity = .none, // undamaged
                 .wounds = try std.ArrayList(Wound).initCapacity(alloc, 0),
                 .is_severed = false,
             };
@@ -205,17 +277,18 @@ pub const Body = struct {
 
     /// Compute effective integrity for all parts in one pass.
     /// Assumes parts are in topological order (parents before children).
-    /// effective = self.integrity * parent.effective (propagates damage down tree)
+    /// effective = self.severity.toIntegrity() * parent.effective (propagates damage down tree)
     pub fn computeEffectiveIntegrities(self: *const Body, out: []f32) void {
         std.debug.assert(out.len >= self.parts.items.len);
 
         for (self.parts.items, 0..) |*part, i| {
+            const integrity = part.severity.toIntegrity();
             if (part.is_severed) {
                 out[i] = 0;
             } else if (part.parent) |parent_idx| {
-                out[i] = part.integrity * out[parent_idx];
+                out[i] = integrity * out[parent_idx];
             } else {
-                out[i] = part.integrity; // root
+                out[i] = integrity; // root
             }
         }
     }
@@ -305,6 +378,46 @@ pub const Body = struct {
         return if (count > 0) total / count else 0;
     }
 
+    /// Result of applying damage to a part
+    pub const DamageResult = struct {
+        wound: Wound,
+        severed: bool,
+        hit_major_artery: bool,
+    };
+
+    /// Apply a damage packet to a specific part.
+    /// Creates a wound, adds it to the part, updates severity, checks for severing.
+    pub fn applyDamageToPart(self: *Body, part_idx: PartIndex, packet: damage.Packet) !DamageResult {
+        const part = &self.parts.items[part_idx];
+
+        // Generate wound based on part's tissue template
+        const wound = applyDamage(packet, part.tissue);
+
+        // Add wound to part
+        try part.wounds.append(self.alloc, wound);
+
+        // Recompute severity from all wounds
+        part.severity = part.computeSeverity();
+
+        // Check for severing: structural layer at .missing from slash,
+        // or .broken+ structural from massive damage
+        const severed = checkSevering(part, &wound);
+        if (severed) {
+            part.is_severed = true;
+        }
+
+        // Check if major artery was hit (for bleeding)
+        const hit_artery = part.has_major_artery and
+            (@intFromEnum(wound.severityAt(.muscle)) >= @intFromEnum(Severity.inhibited) or
+            @intFromEnum(wound.severityAt(.fat)) >= @intFromEnum(Severity.disabled));
+
+        return .{
+            .wound = wound,
+            .severed = severed,
+            .hit_major_artery = hit_artery,
+        };
+    }
+
     const ChildIterator = struct {
         body: *const Body,
         parent: PartIndex,
@@ -366,15 +479,252 @@ pub const Severity = enum {
     disabled,
     broken,
     missing,
+
+    /// Convert severity to a 0.0-1.0 integrity value for calculations.
+    /// Tuning these values affects how damage propagates through part chains.
+    pub fn toIntegrity(self: Severity) f32 {
+        return switch (self) {
+            .none => 1.0,
+            .minor => 0.85,
+            .inhibited => 0.6,
+            .disabled => 0.3,
+            .broken => 0.1,
+            .missing => 0.0,
+        };
+    }
+};
+
+pub const LayerDamage = struct {
+    layer: TissueLayer,
+    severity: Severity,
 };
 
 pub const Wound = struct {
-    tissue: TissueLayer,
-    severity: Severity, // 0.0 to 1.0 (Severed / Crushed)
-    type: DamageKind,
-    // dressing
-    // infection
+    const MAX_LAYERS = 6;
+
+    kind: DamageKind,
+    len: u8 = 0,
+    damages: [MAX_LAYERS]LayerDamage = undefined,
+    // TODO: dressing, infection, bleeding
+
+    pub fn slice(self: *const Wound) []const LayerDamage {
+        return self.damages[0..self.len];
+    }
+
+    pub fn append(self: *Wound, ld: LayerDamage) void {
+        if (self.len < MAX_LAYERS) {
+            self.damages[self.len] = ld;
+            self.len += 1;
+        }
+    }
+
+    pub fn severityAt(self: *const Wound, layer: TissueLayer) Severity {
+        for (self.slice()) |ld| {
+            if (ld.layer == layer) return ld.severity;
+        }
+        return .none;
+    }
+
+    pub fn deepestLayer(self: *const Wound) ?TissueLayer {
+        if (self.len == 0) return null;
+        var deepest: TissueLayer = self.damages[0].layer;
+        var max_depth: u8 = 0;
+        for (self.slice()) |ld| {
+            const d = layerDepth(ld.layer);
+            if (d > max_depth) {
+                max_depth = d;
+                deepest = ld.layer;
+            }
+        }
+        return deepest;
+    }
+
+    pub fn worstSeverity(self: *const Wound) Severity {
+        var worst: Severity = .none;
+        for (self.slice()) |ld| {
+            if (@intFromEnum(ld.severity) > @intFromEnum(worst)) {
+                worst = ld.severity;
+            }
+        }
+        return worst;
+    }
 };
+
+/// Depth ordering for tissue layers (0 = outermost)
+pub fn layerDepth(layer: TissueLayer) u8 {
+    return switch (layer) {
+        .skin => 0,
+        .fat => 1,
+        .muscle => 2,
+        .tendon => 3,
+        .nerve => 3,
+        .bone => 4,
+        .cartilage => 4,
+        .organ => 5,
+    };
+}
+
+/// How a layer interacts with damage types
+pub const LayerResistance = struct {
+    /// Fraction of incoming damage this layer absorbs (dealt to this layer)
+    absorb: f32,
+    /// Penetration cost to pass through this layer
+    pen_cost: f32,
+};
+
+/// Get resistance values for a layer vs damage type
+pub fn layerResistance(layer: TissueLayer, kind: DamageKind) LayerResistance {
+    return switch (kind) {
+        .slash => switch (layer) {
+            // Slash: wide, shallow - outer layers take heavy damage
+            .skin => .{ .absorb = 0.40, .pen_cost = 0.3 },
+            .fat => .{ .absorb = 0.25, .pen_cost = 0.2 },
+            .muscle => .{ .absorb = 0.20, .pen_cost = 0.3 },
+            .tendon => .{ .absorb = 0.30, .pen_cost = 0.2 },
+            .nerve => .{ .absorb = 0.10, .pen_cost = 0.1 },
+            .bone => .{ .absorb = 0.10, .pen_cost = 1.0 }, // hard to cut bone
+            .cartilage => .{ .absorb = 0.25, .pen_cost = 0.3 },
+            .organ => .{ .absorb = 0.30, .pen_cost = 0.2 },
+        },
+        .pierce => switch (layer) {
+            // Pierce: narrow, deep - passes through easily, less damage per layer
+            .skin => .{ .absorb = 0.10, .pen_cost = 0.1 },
+            .fat => .{ .absorb = 0.10, .pen_cost = 0.1 },
+            .muscle => .{ .absorb = 0.15, .pen_cost = 0.2 },
+            .tendon => .{ .absorb = 0.15, .pen_cost = 0.1 },
+            .nerve => .{ .absorb = 0.10, .pen_cost = 0.1 },
+            .bone => .{ .absorb = 0.40, .pen_cost = 0.8 }, // bone stops piercing
+            .cartilage => .{ .absorb = 0.20, .pen_cost = 0.3 },
+            .organ => .{ .absorb = 0.25, .pen_cost = 0.2 },
+        },
+        .bludgeon => switch (layer) {
+            // Bludgeon: transfers through - bone/muscle take most damage
+            .skin => .{ .absorb = 0.05, .pen_cost = 0.0 }, // no penetration concept
+            .fat => .{ .absorb = 0.10, .pen_cost = 0.0 },
+            .muscle => .{ .absorb = 0.30, .pen_cost = 0.0 },
+            .tendon => .{ .absorb = 0.10, .pen_cost = 0.0 },
+            .nerve => .{ .absorb = 0.15, .pen_cost = 0.0 },
+            .bone => .{ .absorb = 0.50, .pen_cost = 0.0 }, // bone absorbs impact
+            .cartilage => .{ .absorb = 0.30, .pen_cost = 0.0 },
+            .organ => .{ .absorb = 0.35, .pen_cost = 0.0 },
+        },
+        else => .{ .absorb = 0.20, .pen_cost = 0.2 }, // fallback for other damage types
+    };
+}
+
+/// Thresholds for converting damage amount to severity
+fn severityFromDamage(amount: f32) Severity {
+    if (amount < 0.05) return .none;
+    if (amount < 0.15) return .minor;
+    if (amount < 0.30) return .inhibited;
+    if (amount < 0.50) return .disabled;
+    if (amount < 0.80) return .broken;
+    return .missing;
+}
+
+/// Apply a damage packet to a body part, producing a wound.
+/// Processes tissue layers outside-in based on the part's template.
+pub fn applyDamage(
+    packet: damage.Packet,
+    template: TissueTemplate,
+) Wound {
+    var wound = Wound{ .kind = packet.kind };
+    var remaining = packet.amount;
+    var penetration = packet.penetration;
+
+    // Process layers outside-in (sorted by depth)
+    const layers = template.layers();
+    var sorted: [6]TissueLayer = undefined;
+    var sorted_len: usize = 0;
+    for (layers) |layer| {
+        sorted[sorted_len] = layer;
+        sorted_len += 1;
+    }
+    // Sort by depth (bubble sort is fine for max 6 elements)
+    for (0..sorted_len) |i| {
+        for (i + 1..sorted_len) |j| {
+            if (layerDepth(sorted[j]) < layerDepth(sorted[i])) {
+                const tmp = sorted[i];
+                sorted[i] = sorted[j];
+                sorted[j] = tmp;
+            }
+        }
+    }
+
+    for (sorted[0..sorted_len]) |layer| {
+        // Bludgeon ignores penetration; others stop when penetration exhausted
+        const dominated_by_pen = packet.kind == .pierce or packet.kind == .slash;
+        if (remaining <= 0 or (dominated_by_pen and penetration <= 0)) break;
+
+        const res = layerResistance(layer, packet.kind);
+        const absorbed = remaining * res.absorb;
+        const severity = severityFromDamage(absorbed);
+
+        if (severity != .none) {
+            wound.append(.{ .layer = layer, .severity = severity });
+        }
+
+        remaining -= absorbed;
+        penetration -= res.pen_cost;
+    }
+
+    return wound;
+}
+
+/// Check if a wound causes severing of a part.
+/// Severing requires structural damage (bone/cartilage) plus soft tissue damage.
+fn checkSevering(part: *const Part, wound: *const Wound) bool {
+    // Already severed
+    if (part.is_severed) return false;
+
+    const bone_sev = wound.severityAt(.bone);
+    const cartilage_sev = wound.severityAt(.cartilage);
+    const muscle_sev = wound.severityAt(.muscle);
+    const tendon_sev = wound.severityAt(.tendon);
+
+    // Determine which structural layer is relevant for this part
+    const has_bone = part.tissue.has(.bone);
+    const has_cartilage = part.tissue.has(.cartilage);
+
+    const structural_sev = if (has_bone)
+        bone_sev
+    else if (has_cartilage)
+        cartilage_sev
+    else
+        return false; // no structural layer (e.g., organ) - can't sever
+
+    // Severing rules by damage type
+    const structural_int = @intFromEnum(structural_sev);
+    const muscle_int = @intFromEnum(muscle_sev);
+    const tendon_int = @intFromEnum(tendon_sev);
+    const broken_int = @intFromEnum(Severity.broken);
+    const disabled_int = @intFromEnum(Severity.disabled);
+    const missing_int = @intFromEnum(Severity.missing);
+
+    switch (wound.kind) {
+        .slash => {
+            // Slash severs when: structural broken + muscle/tendon disabled+
+            if (structural_int >= broken_int) {
+                if (muscle_int >= disabled_int or tendon_int >= disabled_int) {
+                    return true;
+                }
+            }
+            // Or structural missing (clean cut through bone)
+            if (structural_int >= missing_int) return true;
+        },
+        .pierce => {
+            // Pierce rarely severs - only if structural is missing
+            if (structural_int >= missing_int) return true;
+        },
+        .bludgeon, .crush, .shatter => {
+            // Bludgeon/crush can shatter-sever if bone is missing
+            if (structural_int >= missing_int) return true;
+        },
+        else => {},
+    }
+
+    return false;
+}
 
 // === Part definition helpers ===
 
@@ -419,6 +769,31 @@ fn defaultStats(tag: PartTag) PartStats {
     };
 }
 
+fn defaultTemplate(tag: PartTag) TissueTemplate {
+    return switch (tag) {
+        // Core structures (enclose organs, have bone)
+        .head, .torso, .abdomen => .core,
+        .neck => .core, // vertebrae
+
+        // Limb segments
+        .arm, .forearm, .thigh, .shin => .limb,
+        .shoulder => .limb, // scapula + humerus head
+
+        // Joints
+        .elbow, .knee, .wrist, .ankle, .groin => .joint,
+
+        // Extremities
+        .hand, .foot => .joint, // complex bone structure
+        .finger, .thumb, .toe => .digit,
+
+        // Facial features (cartilage-based)
+        .eye, .ear, .nose => .facial,
+
+        // Internal organs
+        .brain, .heart, .lung, .stomach, .liver, .intestine, .tongue, .trachea, .spleen => .organ,
+    };
+}
+
 fn definePartFull(
     comptime name: []const u8,
     tag: PartTag,
@@ -426,6 +801,7 @@ fn definePartFull(
     comptime parent_name: ?[]const u8,
     comptime enclosing_name: ?[]const u8,
     flags: PartFlags,
+    has_major_artery: bool,
 ) PartDef {
     @setEvalBranchQuota(10000);
     const stats = defaultStats(tag);
@@ -440,6 +816,8 @@ fn definePartFull(
         .base_durability = stats.durability,
         .trauma_mult = stats.trauma_mult,
         .flags = flags,
+        .tissue = defaultTemplate(tag),
+        .has_major_artery = has_major_artery,
     };
 }
 
@@ -450,7 +828,7 @@ fn ext(
     side: Side,
     comptime parent_name: ?[]const u8,
 ) PartDef {
-    return definePartFull(name, tag, side, parent_name, null, .{});
+    return definePartFull(name, tag, side, parent_name, null, .{}, false);
 }
 
 // Vital exterior part (head, neck, torso) - loss is fatal or catastrophic
@@ -460,7 +838,27 @@ fn vital(
     side: Side,
     comptime parent_name: ?[]const u8,
 ) PartDef {
-    return definePartFull(name, tag, side, parent_name, null, .{ .is_vital = true });
+    return definePartFull(name, tag, side, parent_name, null, .{ .is_vital = true }, false);
+}
+
+// Vital part with major artery (neck)
+fn vitalArtery(
+    comptime name: []const u8,
+    tag: PartTag,
+    side: Side,
+    comptime parent_name: ?[]const u8,
+) PartDef {
+    return definePartFull(name, tag, side, parent_name, null, .{ .is_vital = true }, true);
+}
+
+// Part with major artery but not vital (groin, inner thigh, armpit)
+fn artery(
+    comptime name: []const u8,
+    tag: PartTag,
+    side: Side,
+    comptime parent_name: ?[]const u8,
+) PartDef {
+    return definePartFull(name, tag, side, parent_name, null, .{}, true);
 }
 
 // Internal organ - enclosed by another part, vital by default
@@ -474,7 +872,7 @@ fn organ(
     return definePartFull(name, tag, side, parent_name, enclosing_name, .{
         .is_vital = true,
         .is_internal = true,
-    });
+    }, false);
 }
 
 // Non-vital internal part (e.g. spleen - survivable loss)
@@ -487,7 +885,7 @@ fn organMinor(
 ) PartDef {
     return definePartFull(name, tag, side, parent_name, enclosing_name, .{
         .is_internal = true,
-    });
+    }, false);
 }
 
 // Sensory organ
@@ -498,7 +896,7 @@ fn sensory(
     comptime parent_name: []const u8,
     comptime flags: PartFlags,
 ) PartDef {
-    return definePartFull(name, tag, side, parent_name, null, flags);
+    return definePartFull(name, tag, side, parent_name, null, flags, false);
 }
 
 // Grasping part (hands)
@@ -508,7 +906,7 @@ fn grasping(
     side: Side,
     comptime parent_name: []const u8,
 ) PartDef {
-    return definePartFull(name, tag, side, parent_name, null, .{ .can_grasp = true });
+    return definePartFull(name, tag, side, parent_name, null, .{ .can_grasp = true }, false);
 }
 
 // Weight-bearing part (feet, legs)
@@ -518,7 +916,17 @@ fn standing(
     side: Side,
     comptime parent_name: []const u8,
 ) PartDef {
-    return definePartFull(name, tag, side, parent_name, null, .{ .can_stand = true });
+    return definePartFull(name, tag, side, parent_name, null, .{ .can_stand = true }, false);
+}
+
+// Weight-bearing part with major artery (thigh)
+fn standingArtery(
+    comptime name: []const u8,
+    tag: PartTag,
+    side: Side,
+    comptime parent_name: []const u8,
+) PartDef {
+    return definePartFull(name, tag, side, parent_name, null, .{ .can_stand = true }, true);
 }
 // to look up parts by ID at runtime, store a std.AutoHashMap(u64, PartIndex)
 // when building the body, using part.id.hash as the key.
@@ -526,10 +934,10 @@ fn standing(
 pub const HumanoidPlan = [_]PartDef{
     // === Core structure ===
     vital("torso", .torso, .center, null),
-    vital("neck", .neck, .center, "torso"),
+    vitalArtery("neck", .neck, .center, "torso"), // carotid, jugular
     vital("head", .head, .center, "neck"),
     vital("abdomen", .abdomen, .center, "torso"),
-    ext("groin", .groin, .center, "abdomen"),
+    artery("groin", .groin, .center, "abdomen"), // femoral
 
     // === Head - sensory organs ===
     sensory("left_eye", .eye, .left, "head", .{ .can_see = true }),
@@ -554,7 +962,7 @@ pub const HumanoidPlan = [_]PartDef{
     organMinor("intestines", .intestine, .center, "abdomen", "abdomen"),
 
     // === Left arm chain ===
-    ext("left_shoulder", .shoulder, .left, "torso"),
+    artery("left_shoulder", .shoulder, .left, "torso"), // axillary
     ext("left_arm", .arm, .left, "left_shoulder"),
     ext("left_elbow", .elbow, .left, "left_arm"),
     ext("left_forearm", .forearm, .left, "left_elbow"),
@@ -567,7 +975,7 @@ pub const HumanoidPlan = [_]PartDef{
     ext("left_pinky_finger", .finger, .left, "left_hand"),
 
     // === Right arm chain ===
-    ext("right_shoulder", .shoulder, .right, "torso"),
+    artery("right_shoulder", .shoulder, .right, "torso"), // axillary
     ext("right_arm", .arm, .right, "right_shoulder"),
     ext("right_elbow", .elbow, .right, "right_arm"),
     ext("right_forearm", .forearm, .right, "right_elbow"),
@@ -580,7 +988,7 @@ pub const HumanoidPlan = [_]PartDef{
     ext("right_pinky_finger", .finger, .right, "right_hand"),
 
     // === Left leg chain ===
-    standing("left_thigh", .thigh, .left, "groin"),
+    standingArtery("left_thigh", .thigh, .left, "groin"), // femoral
     ext("left_knee", .knee, .left, "left_thigh"),
     standing("left_shin", .shin, .left, "left_knee"),
     ext("left_ankle", .ankle, .left, "left_shin"),
@@ -592,7 +1000,7 @@ pub const HumanoidPlan = [_]PartDef{
     ext("left_pinky_toe", .toe, .left, "left_foot"),
 
     // === Right leg chain ===
-    standing("right_thigh", .thigh, .right, "groin"),
+    standingArtery("right_thigh", .thigh, .right, "groin"), // femoral
     ext("right_knee", .knee, .right, "right_thigh"),
     standing("right_shin", .shin, .right, "right_knee"),
     ext("right_ankle", .ankle, .right, "right_shin"),
@@ -701,13 +1109,13 @@ test "effective integrity propagates through chain" {
     const hand_eff_before = body.effectiveIntegrity(hand_idx);
     try std.testing.expect(hand_eff_before > 0.9);
 
-    // Damage shoulder to 50%
-    body.parts.items[shoulder_idx].integrity = 0.5;
+    // Damage shoulder to .disabled (0.3 integrity)
+    body.parts.items[shoulder_idx].severity = .disabled;
 
     // Hand effective integrity should be reduced
     const hand_eff_after = body.effectiveIntegrity(hand_idx);
     try std.testing.expect(hand_eff_after < hand_eff_before);
-    try std.testing.expect(hand_eff_after <= 0.5);
+    try std.testing.expect(hand_eff_after <= 0.3);
 }
 
 test "grasp strength factors in fingers" {
@@ -744,8 +1152,8 @@ test "mobility score with damaged groin" {
     const full_mobility = body.mobilityScore();
     try std.testing.expect(full_mobility > 0.9);
 
-    // Damage groin (affects both legs)
-    body.parts.items[groin_idx].integrity = 0.3;
+    // Damage groin to .disabled (affects both legs)
+    body.parts.items[groin_idx].severity = .disabled;
 
     // Reduced mobility
     const reduced_mobility = body.mobilityScore();
@@ -769,4 +1177,265 @@ test "functional grasping parts" {
     // Only right hand functional now
     const hands_after = body.functionalGraspingParts(0.5);
     try std.testing.expectEqual(@as(usize, 1), hands_after.len);
+}
+
+test "tissue template layer queries" {
+    // Limbs have bone, muscle, etc.
+    try std.testing.expect(TissueTemplate.limb.has(.bone));
+    try std.testing.expect(TissueTemplate.limb.has(.muscle));
+    try std.testing.expect(TissueTemplate.limb.has(.skin));
+    try std.testing.expect(!TissueTemplate.limb.has(.cartilage));
+    try std.testing.expect(!TissueTemplate.limb.has(.organ));
+
+    // Digits are minimal
+    try std.testing.expect(TissueTemplate.digit.has(.bone));
+    try std.testing.expect(TissueTemplate.digit.has(.tendon));
+    try std.testing.expect(!TissueTemplate.digit.has(.muscle));
+
+    // Facial features have cartilage, not bone
+    try std.testing.expect(TissueTemplate.facial.has(.cartilage));
+    try std.testing.expect(!TissueTemplate.facial.has(.bone));
+}
+
+test "part definitions have correct tissue and artery flags" {
+    // Check a few representative parts from HumanoidPlan
+    for (HumanoidPlan) |def| {
+        if (std.mem.eql(u8, def.name, "neck")) {
+            try std.testing.expectEqual(TissueTemplate.core, def.tissue);
+            try std.testing.expect(def.has_major_artery); // carotid
+        }
+        if (std.mem.eql(u8, def.name, "left_thigh")) {
+            try std.testing.expectEqual(TissueTemplate.limb, def.tissue);
+            try std.testing.expect(def.has_major_artery); // femoral
+        }
+        if (std.mem.eql(u8, def.name, "left_index_finger")) {
+            try std.testing.expectEqual(TissueTemplate.digit, def.tissue);
+            try std.testing.expect(!def.has_major_artery);
+        }
+        if (std.mem.eql(u8, def.name, "nose")) {
+            try std.testing.expectEqual(TissueTemplate.facial, def.tissue);
+            try std.testing.expect(!def.has_major_artery);
+        }
+    }
+}
+
+// === Wound and damage application tests ===
+
+test "wound tracks layer damage" {
+    var wound = Wound{ .kind = .slash };
+    wound.append(.{ .layer = .skin, .severity = .broken });
+    wound.append(.{ .layer = .fat, .severity = .disabled });
+    wound.append(.{ .layer = .muscle, .severity = .minor });
+
+    try std.testing.expectEqual(@as(u8, 3), wound.len);
+    try std.testing.expectEqual(Severity.broken, wound.severityAt(.skin));
+    try std.testing.expectEqual(Severity.disabled, wound.severityAt(.fat));
+    try std.testing.expectEqual(Severity.minor, wound.severityAt(.muscle));
+    try std.testing.expectEqual(Severity.none, wound.severityAt(.bone)); // not hit
+}
+
+test "wound finds deepest layer and worst severity" {
+    var wound = Wound{ .kind = .pierce };
+    wound.append(.{ .layer = .skin, .severity = .minor });
+    wound.append(.{ .layer = .muscle, .severity = .inhibited });
+    wound.append(.{ .layer = .bone, .severity = .minor });
+
+    try std.testing.expectEqual(TissueLayer.bone, wound.deepestLayer().?);
+    try std.testing.expectEqual(Severity.inhibited, wound.worstSeverity());
+}
+
+test "slash damage: heavy outer layer damage, shallow penetration" {
+    const packet = damage.Packet{
+        .amount = 1.0,
+        .kind = .slash,
+        .penetration = 0.5, // limited penetration
+    };
+
+    const wound = applyDamage(packet, .limb);
+
+    // Slash should damage outer layers heavily
+    try std.testing.expect(wound.len >= 2);
+    try std.testing.expect(wound.severityAt(.skin) != .none);
+
+    // Skin should take significant damage from slash
+    const skin_sev = @intFromEnum(wound.severityAt(.skin));
+    try std.testing.expect(skin_sev >= @intFromEnum(Severity.inhibited));
+
+    // Bone likely untouched or minimal due to low penetration
+    const bone_sev = @intFromEnum(wound.severityAt(.bone));
+    try std.testing.expect(bone_sev <= @intFromEnum(Severity.minor));
+}
+
+test "pierce damage: light outer damage, deep penetration" {
+    const packet = damage.Packet{
+        .amount = 1.0,
+        .kind = .pierce,
+        .penetration = 1.5, // high penetration
+    };
+
+    const wound = applyDamage(packet, .limb);
+
+    // Pierce should reach deep
+    try std.testing.expect(wound.len >= 3);
+
+    // Outer layers take less damage than inner
+    const skin_sev = @intFromEnum(wound.severityAt(.skin));
+    const muscle_sev = @intFromEnum(wound.severityAt(.muscle));
+    try std.testing.expect(skin_sev <= muscle_sev);
+}
+
+test "bludgeon damage: bone and muscle absorb most" {
+    const packet = damage.Packet{
+        .amount = 1.0,
+        .kind = .bludgeon,
+        .penetration = 0.0, // irrelevant for bludgeon
+    };
+
+    const wound = applyDamage(packet, .limb);
+
+    // Bludgeon should damage bone/muscle primarily
+    try std.testing.expect(wound.severityAt(.bone) != .none);
+    try std.testing.expect(wound.severityAt(.muscle) != .none);
+
+    // Bone takes the brunt
+    const bone_sev = @intFromEnum(wound.severityAt(.bone));
+    const skin_sev = @intFromEnum(wound.severityAt(.skin));
+    try std.testing.expect(bone_sev >= skin_sev);
+}
+
+test "facial tissue: cartilage instead of bone" {
+    const packet = damage.Packet{
+        .amount = 0.8,
+        .kind = .slash,
+        .penetration = 0.5,
+    };
+
+    const wound = applyDamage(packet, .facial);
+
+    // Facial has cartilage, not bone
+    try std.testing.expectEqual(Severity.none, wound.severityAt(.bone));
+    try std.testing.expect(wound.severityAt(.cartilage) != .none or wound.severityAt(.skin) != .none);
+}
+
+test "digit tissue: minimal layers" {
+    const packet = damage.Packet{
+        .amount = 0.5,
+        .kind = .slash,
+        .penetration = 0.3,
+    };
+
+    const wound = applyDamage(packet, .digit);
+
+    // Digit only has bone, tendon, skin - no muscle
+    try std.testing.expectEqual(Severity.none, wound.severityAt(.muscle));
+}
+
+// === Body damage application tests ===
+
+test "applying damage to part adds wound and updates severity" {
+    const alloc = std.testing.allocator;
+    var body = try Body.fromPlan(alloc, &HumanoidPlan);
+    defer body.deinit();
+
+    const arm_idx = body.indexOf("left_arm").?;
+
+    // Initially undamaged
+    try std.testing.expectEqual(Severity.none, body.parts.items[arm_idx].severity);
+    try std.testing.expectEqual(@as(usize, 0), body.parts.items[arm_idx].wounds.items.len);
+
+    // Apply moderate slash
+    const packet = damage.Packet{
+        .amount = 0.6,
+        .kind = .slash,
+        .penetration = 0.4,
+    };
+    const result = try body.applyDamageToPart(arm_idx, packet);
+
+    // Wound was added
+    try std.testing.expectEqual(@as(usize, 1), body.parts.items[arm_idx].wounds.items.len);
+
+    // Severity updated
+    try std.testing.expect(body.parts.items[arm_idx].severity != .none);
+
+    // Not severed by moderate damage
+    try std.testing.expect(!result.severed);
+    try std.testing.expect(!body.parts.items[arm_idx].is_severed);
+}
+
+test "severe slash can sever a limb" {
+    const alloc = std.testing.allocator;
+    var body = try Body.fromPlan(alloc, &HumanoidPlan);
+    defer body.deinit();
+
+    const arm_idx = body.indexOf("left_arm").?;
+
+    // Massive slash - enough to break bone and disable muscle
+    const packet = damage.Packet{
+        .amount = 3.0,
+        .kind = .slash,
+        .penetration = 2.0,
+    };
+    const result = try body.applyDamageToPart(arm_idx, packet);
+
+    // Check the wound has severe damage
+    try std.testing.expect(@intFromEnum(result.wound.worstSeverity()) >= @intFromEnum(Severity.disabled));
+
+    // If bone reached .broken+ and muscle .disabled+, should sever
+    const bone_sev = @intFromEnum(result.wound.severityAt(.bone));
+    const muscle_sev = @intFromEnum(result.wound.severityAt(.muscle));
+    if (bone_sev >= @intFromEnum(Severity.broken) and muscle_sev >= @intFromEnum(Severity.disabled)) {
+        try std.testing.expect(result.severed);
+        try std.testing.expect(body.parts.items[arm_idx].is_severed);
+    }
+}
+
+test "major artery hit detection" {
+    const alloc = std.testing.allocator;
+    var body = try Body.fromPlan(alloc, &HumanoidPlan);
+    defer body.deinit();
+
+    // Neck has major artery
+    const neck_idx = body.indexOf("neck").?;
+    try std.testing.expect(body.parts.items[neck_idx].has_major_artery);
+
+    // Deep stab to neck
+    const packet = damage.Packet{
+        .amount = 1.0,
+        .kind = .pierce,
+        .penetration = 1.0,
+    };
+    const result = try body.applyDamageToPart(neck_idx, packet);
+
+    // If wound penetrated to muscle/fat, should flag artery hit
+    const muscle_sev = @intFromEnum(result.wound.severityAt(.muscle));
+    const fat_sev = @intFromEnum(result.wound.severityAt(.fat));
+    if (muscle_sev >= @intFromEnum(Severity.inhibited) or fat_sev >= @intFromEnum(Severity.disabled)) {
+        try std.testing.expect(result.hit_major_artery);
+    }
+}
+
+test "part severity computed from wounds" {
+    const alloc = std.testing.allocator;
+    var body = try Body.fromPlan(alloc, &HumanoidPlan);
+    defer body.deinit();
+
+    const arm_idx = body.indexOf("left_arm").?;
+    const part = &body.parts.items[arm_idx];
+
+    // Add multiple wounds manually
+    var wound1 = Wound{ .kind = .slash };
+    wound1.append(.{ .layer = .skin, .severity = .minor });
+    wound1.append(.{ .layer = .muscle, .severity = .inhibited });
+    try part.wounds.append(alloc, wound1);
+
+    var wound2 = Wound{ .kind = .pierce };
+    wound2.append(.{ .layer = .skin, .severity = .minor });
+    wound2.append(.{ .layer = .bone, .severity = .minor });
+    try part.wounds.append(alloc, wound2);
+
+    // Compute severity - bone is .minor, but muscle is .inhibited
+    // Soft tissue is capped at structural + 2, so .inhibited is allowed
+    const sev = part.computeSeverity();
+    try std.testing.expect(sev != .none);
+    try std.testing.expect(@intFromEnum(sev) <= @intFromEnum(Severity.inhibited) + 1);
 }
