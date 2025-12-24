@@ -121,18 +121,6 @@ pub const Agent = struct {
     resistances: std.ArrayList(damage.Resistance),
     vulnerabilities: std.ArrayList(damage.Vulnerability),
 
-    // pub fn initEmpty(alloc: std.mem.Allocator, slot_map: *SlotMap(Agent)) *Agent {
-    //     const id = try slot_map.insert();
-    //     var agent = try slot_map.get(id);
-    //     agent.id = id;
-    //     agent.alloc = alloc;
-    //     agent.conditions = try std.ArrayList(damage.Condition).initCapacity(alloc, 0);
-    //     agent.resistances = try std.ArrayList(damage.Resistance).initCapacity(alloc, 0);
-    //     agent.immunities = try std.ArrayList(damage.Immunity).initCapacity(alloc, 0);
-    //     agent.vulnerabilities = try std.ArrayList(damage.Vulnerability).initCapacity(alloc, 0);
-    //     return agent;
-    // }
-
     pub fn init(
         alloc: std.mem.Allocator,
         slot_map: *SlotMap(*Agent),
@@ -165,6 +153,7 @@ pub const Agent = struct {
         };
         const id = try slot_map.insert(agent);
         agent.id = id;
+        agent.body.agent_id = id;
         return agent;
     }
 
@@ -182,6 +171,11 @@ pub const Agent = struct {
         self.immunities.deinit(alloc);
         self.resistances.deinit(alloc);
         self.vulnerabilities.deinit(alloc);
+    }
+
+    pub fn destroy(self: *Agent, slot_map: *SlotMap(*Agent)) void {
+        slot_map.remove(self.id);
+        self.deinit();
     }
 
     fn isDominantSide(dominant: body.Side, side: body.Side) bool {

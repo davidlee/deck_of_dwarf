@@ -5,6 +5,7 @@ const Slot = void; // TODO what's this look like?
 const deck = @import("deck.zig");
 const cards = @import("cards.zig");
 const world = @import("world.zig");
+const body = @import("body.zig");
 const Zone = cards.Zone;
 pub const CardWithSlot = struct {
     card: entity.ID,
@@ -37,6 +38,20 @@ pub const Event = union(enum) {
         // TODO instances -> [exhausted?]
     },
 
+    wound_inflicted: struct {
+        agent_id: entity.ID,
+        wound: body.Wound,
+        part_idx: body.PartIndex,
+    },
+
+    body_part_severed: struct {
+        agent_id: entity.ID,
+        part_idx: body.PartIndex,
+    },
+    hit_major_artery: struct {
+        agent_id: entity.ID,
+        part_idx: body.PartIndex,
+    },
     played_reaction: CardWithEvent,
 
     equipped_item: CardWithSlot,

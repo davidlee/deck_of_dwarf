@@ -2,6 +2,8 @@ const std = @import("std");
 const damage = @import("damage.zig");
 const events = @import("events.zig");
 const EventSystem = events.EventSystem;
+const Event = events.Event;
+const entity = @import("entity.zig");
 
 const DamageKind = damage.Kind;
 
@@ -194,6 +196,7 @@ pub const PartDef = struct {
 };
 
 pub const Body = struct {
+    agent_id: entity.ID = undefined, // Body created before agent; set in Agent.init
     alloc: std.mem.Allocator,
     parts: std.ArrayList(Part),
     index_by_hash: std.AutoHashMap(u64, PartIndex), // name hash → part index
@@ -388,9 +391,32 @@ pub const Body = struct {
         hit_major_artery: bool,
     };
 
+    pub fn applyDamageWithEvents(self: *Body, event_sys: events.EventSystem, part_idx: PartIndex, packet: damage.Packet) !DamageResult {
+        const result = self.applyDamageToPart(part_idx, packet);
+        if (result.wound) {
+            try event_sys.push(Event{ .wound_inflicted = .{
+                .agent_id = self.agent_id,
+                .wound = result.wound,
+                .part_idx = part_idx,
+            } });
+        }
+        if (result.severed) {
+            try event_sys.push(Event{ .body_part_severed = .{
+                .agent_id = self.agent_id,
+                .part_idx = part_idx,
+            } });
+        }
+        if (result.hit_major_artery) {
+            try event_sys.push(Event{ .hit_major_artery = .{
+                .agent_id = self.agent_id,
+                .part_idx = part_idx,
+            } });
+        }
+    }
+
     /// Apply a damage packet to a specific part.
     /// Creates a wound, adds it to the part, updates severity, checks for severing.
-    pub fn applyDamageToPart(self: *Body, part_idx: PartIndex, packet: damage.Packet) !DamageResult {
+    fn applyDamageToPart(self: *Body, part_idx: PartIndex, packet: damage.Packet) !DamageResult {
         const part = &self.parts.items[part_idx];
 
         // Generate wound based on part's tissue template
