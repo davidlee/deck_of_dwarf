@@ -56,10 +56,23 @@ pub const Side = enum(u8) {
     left,
     right,
     center, // for Agent.dominant_side, this == ambidextrous
-    none, 
+    none,
 };
 
-pub const TissueLayer = enum { bone, artery, muscle, fat, nerve, skin };
+pub const TissueLayer = enum { organ, cartilage, bone, tendon, artery, vein, muscle, fat, nerve, skin };
+
+pub const structural_layers = []TissueLayer{
+    .bone,
+    .artery,
+    .vein,
+    .muscle,
+    .tendon,
+    .fat,
+    .nerve,
+    .skin,
+};
+pub const organ_layers = []TissueLayer{.organ};
+pub const facial_feature_layers = []TissueLayer{ .cartilage, .fat, .skin };
 
 pub const Part = struct {
     name_hash: u64, // hash of name for runtime lookups
@@ -346,9 +359,18 @@ pub const Body = struct {
     }
 };
 
+pub const Severity = enum {
+    none,
+    minor,
+    inhibited,
+    disabled,
+    broken,
+    missing,
+};
+
 pub const Wound = struct {
     tissue: TissueLayer,
-    severity: f32, // 0.0 to 1.0 (Severed / Crushed)
+    severity: Severity, // 0.0 to 1.0 (Severed / Crushed)
     type: DamageKind,
     // dressing
     // infection

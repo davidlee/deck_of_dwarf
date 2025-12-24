@@ -11,3 +11,5 @@ Success in combat is about anticipating your opponent, carefully conserving stam
 Everything is a card, drawn at random from your deck; but your inventory is modelled in autistic detail. Gambeson can be layered under chain; munitions plate is nearly impervious, but leaves your joints vulnerable to a rondel dagger.
 
 Think of it as an attempt to answer the question nobody ever asked: what if Dwarf Fortress fell into a teleporter with Slay the Spire and Balatro?
+
+current status: pre-alpha. No graphics; partial harness testing partially complete core systems.
