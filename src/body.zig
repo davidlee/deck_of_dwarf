@@ -391,27 +391,30 @@ pub const Body = struct {
         hit_major_artery: bool,
     };
 
-    pub fn applyDamageWithEvents(self: *Body, event_sys: events.EventSystem, part_idx: PartIndex, packet: damage.Packet) !DamageResult {
-        const result = self.applyDamageToPart(part_idx, packet);
-        if (result.wound) {
-            try event_sys.push(Event{ .wound_inflicted = .{
+    pub fn applyDamageWithEvents(self: *Body, event_sys: *EventSystem, part_idx: PartIndex, packet: damage.Packet) !DamageResult {
+        const result = try self.applyDamageToPart(part_idx, packet);
+
+        if (result.wound.len > 0) {
+            try event_sys.push(.{ .wound_inflicted = .{
                 .agent_id = self.agent_id,
                 .wound = result.wound,
                 .part_idx = part_idx,
             } });
         }
         if (result.severed) {
-            try event_sys.push(Event{ .body_part_severed = .{
+            try event_sys.push(.{ .body_part_severed = .{
                 .agent_id = self.agent_id,
                 .part_idx = part_idx,
             } });
         }
         if (result.hit_major_artery) {
-            try event_sys.push(Event{ .hit_major_artery = .{
+            try event_sys.push(.{ .hit_major_artery = .{
                 .agent_id = self.agent_id,
                 .part_idx = part_idx,
             } });
         }
+
+        return result;
     }
 
     /// Apply a damage packet to a specific part.
@@ -422,8 +425,10 @@ pub const Body = struct {
         // Generate wound based on part's tissue template
         const wound = applyDamage(packet, part.tissue);
 
-        // Add wound to part
-        try part.wounds.append(self.alloc, wound);
+        // Add wound to part (if any layers damaged)
+        if (wound.len > 0) {
+            try part.wounds.append(self.alloc, wound);
+        }
 
         // Recompute severity from all wounds
         part.severity = part.computeSeverity();

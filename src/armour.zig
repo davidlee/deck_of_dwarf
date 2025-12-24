@@ -1,6 +1,7 @@
 const std = @import("std");
 const body = @import("body.zig");
 const damage = @import("damage.zig");
+const entity = @import("entity.zig");
 const inventory = @import("inventory.zig");
 
 const Resistance = damage.Resistance;
@@ -35,7 +36,7 @@ const Totality = enum {
     // full-fit simple construction (gambeson, etc) with no secondary materials
     total,
     // as good as it gets. More fully articulated plates than a pixar film about anthropomorphic
-    // kitchen utensils - finding weak spots is a real challenge.
+    // kitchen utensils - only visor slits, armpits, etc admit any entry.
     indimidating,
     // a practical compromise, but with attention paid to the back and kidneys, calves, etc.
     comprehensive,
@@ -45,27 +46,47 @@ const Totality = enum {
     minimal,
 };
 
-const Fit = struct {
-
-    // coverage: []
+const InstanceCoverage = struct {
+    totality: Totality,
+    part_tag: body.PartTag,
+    layer: inventory.Layer,
+    material: *const Material,
+    tags: null,
 };
 
-const ConstructionLayer = struct {
-    material: Material,
-    coverage: inventory.Coverage,
+const PatternCoverage = struct { // as per inventory.Coverage but includes Totality
+    totality: Totality,
+    part_tags: []const body.PartTag,
     layer: inventory.Layer,
 };
 
-// pub const Layer = struct {
-//     part_tags: []const body.PartTag,
-//     layer: inventory.Layer,
-//     material: Material,
-//     totality: Totality,
-// };
+const Pattern = struct {
+    coverage: []PatternCoverage,
+};
 
-const Construction = struct {
+// designed to be easily definable at comptime
+const Template = struct {
+    id: u64,
     name: []const u8,
-    // layers: Layer,
+    material: *const Material,
+    pattern: *const Pattern,
+};
+
+const Instance = struct {
+    name: []const u8,
+    template_id: u64,
+    id: entity.ID,
+    tags: null,
+    locations: []LocationCoverage,
+
+    pub fn init(alloc: std.mem.Allocator, template: *const Template) !*Instance {
+        _ = .{ template, alloc };
+        // unpack the template into []InstanceCoverage for ergonomic runtime access
+    }
+
+    pub fn deinit(self: *Instance, alloc: std.mem.Allocator) void {
+        _ = .{ self, alloc };
+    }
 };
 
 // all armour as worn, with precomputed values
