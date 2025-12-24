@@ -126,7 +126,7 @@ pub const CommandHandler = struct {
     }
 
     pub fn playActionCard(self: *CommandHandler, card: *cards.Instance) !void {
-        const player = &self.world.player;
+        const player = self.world.player;
         const game_state = self.world.fsm.currentState();
         var event_system = &self.world.events;
         var pd = player.cards.deck;

@@ -1,5 +1,8 @@
 const std = @import("std");
 const damage = @import("damage.zig");
+const events = @import("events.zig");
+const EventSystem = events.EventSystem;
+
 const DamageKind = damage.Kind;
 
 pub const PartIndex = u16; // Up to 65k body parts is enough
@@ -409,7 +412,7 @@ pub const Body = struct {
         // Check if major artery was hit (for bleeding)
         const hit_artery = part.has_major_artery and
             (@intFromEnum(wound.severityAt(.muscle)) >= @intFromEnum(Severity.inhibited) or
-            @intFromEnum(wound.severityAt(.fat)) >= @intFromEnum(Severity.disabled));
+                @intFromEnum(wound.severityAt(.fat)) >= @intFromEnum(Severity.disabled));
 
         return .{
             .wound = wound,

@@ -97,6 +97,7 @@ pub const Encounter = struct {
 // };
 
 pub const Agent = struct {
+    id: entity.ID,
     alloc: std.mem.Allocator,
     director: Director,
     cards: Strat,
@@ -119,22 +120,39 @@ pub const Agent = struct {
     immunities: std.ArrayList(damage.Immunity),
     resistances: std.ArrayList(damage.Resistance),
     vulnerabilities: std.ArrayList(damage.Vulnerability),
+
+    // pub fn initEmpty(alloc: std.mem.Allocator, slot_map: *SlotMap(Agent)) *Agent {
+    //     const id = try slot_map.insert();
+    //     var agent = try slot_map.get(id);
+    //     agent.id = id;
+    //     agent.alloc = alloc;
+    //     agent.conditions = try std.ArrayList(damage.Condition).initCapacity(alloc, 0);
+    //     agent.resistances = try std.ArrayList(damage.Resistance).initCapacity(alloc, 0);
+    //     agent.immunities = try std.ArrayList(damage.Immunity).initCapacity(alloc, 0);
+    //     agent.vulnerabilities = try std.ArrayList(damage.Vulnerability).initCapacity(alloc, 0);
+    //     return agent;
+    // }
+
     pub fn init(
         alloc: std.mem.Allocator,
+        slot_map: *SlotMap(*Agent),
         dr: Director,
         cs: Strat,
         sb: stats.Block,
         bd: body.Body,
         stamina: f32,
-    ) !Agent {
-        return Agent{
+    ) !*Agent {
+        // const agent = initEmpty(alloc, slot_map);
+        const agent = try alloc.create(combat.Agent);
+        agent.* = .{
+            .id = undefined,
             .alloc = alloc,
             .director = dr,
             .cards = cs,
             .stats = sb,
             // .state = State.init(alloc, stamina),
             .body = bd,
-            .armour =  undefined, //armour.Stack{.coverage = &.{}},
+            .armour = undefined, //armour.Stack{.coverage = &.{}},
             .weapons = undefined,
             .engagement = (if (dr == .ai) Engagement{} else null),
             .stamina = stamina,
@@ -145,10 +163,14 @@ pub const Agent = struct {
             .immunities = try std.ArrayList(damage.Immunity).initCapacity(alloc, 5),
             .vulnerabilities = try std.ArrayList(damage.Vulnerability).initCapacity(alloc, 5),
         };
+        const id = try slot_map.insert(agent);
+        agent.id = id;
+        return agent;
     }
 
     pub fn deinit(self: *Agent) void {
         const alloc = self.alloc;
+        // slot_map.remove(self.id);
 
         //self.cards.deinit(alloc);
         switch (self.cards) {
@@ -161,7 +183,7 @@ pub const Agent = struct {
         self.resistances.deinit(alloc);
         self.vulnerabilities.deinit(alloc);
     }
-    
+
     fn isDominantSide(dominant: body.Side, side: body.Side) bool {
         return dominant == .center or dominant.? == side;
     }

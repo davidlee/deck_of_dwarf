@@ -44,6 +44,7 @@ pub fn runTestCase(world: *World) !void {
 
     var mob = try combat.Agent.init(
         world.alloc,
+        world.agents,
         .ai,
         combat.Strat{ .deck = mobdeck },
         stats.Block.splat(6),
@@ -51,7 +52,7 @@ pub fn runTestCase(world: *World) !void {
         10.0,
     );
 
-    try world.encounter.?.enemies.append(world.alloc, &mob);
+    try world.encounter.?.enemies.append(world.alloc, mob);
 
     try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
     try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);

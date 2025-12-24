@@ -38,7 +38,8 @@ pub const World = struct {
     events: EventSystem,
     encounter: ?combat.Encounter,
     random: random.RandomStreamDict,
-    player: combat.Agent,
+    agents: *SlotMap(*combat.Agent),
+    player: *combat.Agent,
     fsm: zigfsm.StateMachine(GameState, GameEvent, .player_card_selection),
     // deck: Deck,
     commandHandler: CommandHandler,
@@ -59,12 +60,16 @@ pub const World = struct {
         const playerBody = try body.Body.fromPlan(alloc, &body.HumanoidPlan);
 
         const self = try alloc.create(World);
+        const agents = try alloc.create(SlotMap(*combat.Agent));
+        agents.* = try SlotMap(*combat.Agent).init(alloc);
+
         self.* = .{
             .alloc = alloc,
             .events = try EventSystem.init(alloc),
             .encounter = try combat.Encounter.init(alloc),
             .random = random.RandomStreamDict.init(),
-            .player = try player.newPlayer(alloc, playerDeck, playerStats, playerBody),
+            .agents = agents,
+            .player = try player.newPlayer(alloc, agents, playerDeck, playerStats, playerBody),
             .fsm = fsm,
             // .deck = try Deck.init(alloc, &BeginnerDeck),
             .eventProcessor = undefined,
@@ -85,6 +90,7 @@ pub const World = struct {
         if (self.encounter) |*encounter| {
             encounter.deinit(self.alloc);
         }
+        self.agents.deinit();
         self.alloc.destroy(self);
     }
 
