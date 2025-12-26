@@ -6,6 +6,8 @@ const deck = @import("deck.zig");
 const cards = @import("cards.zig");
 const world = @import("world.zig");
 const body = @import("body.zig");
+const combat = @import("combat.zig");
+const resolution = @import("resolution.zig");
 const Zone = cards.Zone;
 pub const CardWithSlot = struct {
     card: entity.ID,
@@ -74,6 +76,21 @@ pub const Event = union(enum) {
         agent_id: entity.ID,
         part_idx: body.PartIndex,
         layer: u8,
+    },
+
+    // Resolution events
+    technique_resolved: struct {
+        attacker_id: entity.ID,
+        defender_id: entity.ID,
+        technique_id: cards.TechniqueID,
+        outcome: resolution.Outcome,
+    },
+    advantage_changed: struct {
+        agent_id: entity.ID,
+        engagement_with: ?entity.ID, // null for intrinsic (balance)
+        axis: combat.AdvantageAxis,
+        old_value: f32,
+        new_value: f32,
     },
 
     played_reaction: CardWithEvent,

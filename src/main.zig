@@ -13,6 +13,7 @@ const cards = @import("cards.zig");
 const deck = @import("card_list.zig").BeginnerDeck;
 
 const harness = @import("harness.zig");
+const resolution = @import("resolution.zig");
 
 const CommandHandler = @import("apply.zig").CommandHandler;
 
