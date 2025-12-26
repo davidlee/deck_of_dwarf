@@ -146,12 +146,21 @@ pub const TechniqueID = enum {
     block,
 };
 
+/// Which weapon profile an attack uses
+pub const AttackMode = enum {
+    thrust, // uses weapon.thrust
+    swing, // uses weapon.swing
+    ranged, // uses weapon.ranged (future)
+    none, // defensive technique, no weapon profile
+};
+
 pub const Technique = struct {
     id: TechniqueID,
     name: []const u8,
     damage: damage.Base,
     difficulty: f32,
     exclusivity: Exclusivity = .weapon,
+    attack_mode: AttackMode = .swing, // which weapon profile to use
 
     // Hit location targeting
     target_height: body.Height = .mid,
@@ -238,4 +247,34 @@ pub const Stakes = enum {
     guarded,
     committed,
     reckless,
+
+    /// Modifier to base hit chance
+    pub fn hitChanceBonus(self: Stakes) f32 {
+        return switch (self) {
+            .probing => -0.1,
+            .guarded => 0.0,
+            .committed => 0.1,
+            .reckless => 0.2,
+        };
+    }
+
+    /// Multiplier for damage output
+    pub fn damageMultiplier(self: Stakes) f32 {
+        return switch (self) {
+            .probing => 0.4,
+            .guarded => 1.0,
+            .committed => 1.4,
+            .reckless => 2.0,
+        };
+    }
+
+    /// Multiplier for advantage effects (higher stakes = bigger swings)
+    pub fn advantageMultiplier(self: Stakes, success: bool) f32 {
+        return switch (self) {
+            .probing => 0.5,
+            .guarded => 1.0,
+            .committed => if (success) 1.25 else 1.5,
+            .reckless => if (success) 1.5 else 2.0,
+        };
+    }
 };

@@ -55,17 +55,12 @@ pub fn calculateHitChance(attack: AttackContext, defense: DefenseContext) f32 {
     chance -= attack.technique.difficulty * 0.1;
 
     // Weapon accuracy modifier
-    if (getWeaponOffensive(attack.weapon_template, attack.technique.id)) |weapon_off| {
+    if (getWeaponOffensive(attack.weapon_template, attack.technique)) |weapon_off| {
         chance += weapon_off.accuracy * 0.1;
     }
 
     // Stakes modifier
-    chance += switch (attack.stakes) {
-        .probing => -0.1,
-        .guarded => 0.0,
-        .committed => 0.1,
-        .reckless => 0.2,
-    };
+    chance += attack.stakes.hitChanceBonus();
 
     // Engagement advantage (pressure, control, position)
     const engagement_bonus = (attack.engagement.playerAdvantage() - 0.5) * 0.3;
@@ -141,6 +136,26 @@ pub fn resolveOutcome(
 pub const AdvantageEffect = combat.AdvantageEffect;
 pub const TechniqueAdvantage = combat.TechniqueAdvantage;
 
+/// Emit advantage_changed event if value actually changed
+fn emitIfChanged(
+    w: *World,
+    agent_id: entity.ID,
+    engagement_with: ?entity.ID,
+    axis: combat.AdvantageAxis,
+    old: f32,
+    new: f32,
+) !void {
+    if (old != new) {
+        try w.events.push(.{ .advantage_changed = .{
+            .agent_id = agent_id,
+            .engagement_with = engagement_with,
+            .axis = axis,
+            .old_value = old,
+            .new_value = new,
+        } });
+    }
+}
+
 /// Apply advantage effects and emit events for any changes
 pub fn applyAdvantageWithEvents(
     effect: AdvantageEffect,
@@ -161,52 +176,13 @@ pub fn applyAdvantageWithEvents(
 
     // Emit events for changed values
     // Engagement changes are relative to defender (engagement stored on mob)
-    if (effect.pressure != 0) {
-        try w.events.push(.{ .advantage_changed = .{
-            .agent_id = defender.id,
-            .engagement_with = attacker.id,
-            .axis = .pressure,
-            .old_value = old_pressure,
-            .new_value = engagement.pressure,
-        } });
-    }
-    if (effect.control != 0) {
-        try w.events.push(.{ .advantage_changed = .{
-            .agent_id = defender.id,
-            .engagement_with = attacker.id,
-            .axis = .control,
-            .old_value = old_control,
-            .new_value = engagement.control,
-        } });
-    }
-    if (effect.position != 0) {
-        try w.events.push(.{ .advantage_changed = .{
-            .agent_id = defender.id,
-            .engagement_with = attacker.id,
-            .axis = .position,
-            .old_value = old_position,
-            .new_value = engagement.position,
-        } });
-    }
+    try emitIfChanged(w, defender.id, attacker.id, .pressure, old_pressure, engagement.pressure);
+    try emitIfChanged(w, defender.id, attacker.id, .control, old_control, engagement.control);
+    try emitIfChanged(w, defender.id, attacker.id, .position, old_position, engagement.position);
+
     // Balance is intrinsic (engagement_with = null)
-    if (effect.self_balance != 0) {
-        try w.events.push(.{ .advantage_changed = .{
-            .agent_id = attacker.id,
-            .engagement_with = null,
-            .axis = .balance,
-            .old_value = old_attacker_balance,
-            .new_value = attacker.balance,
-        } });
-    }
-    if (effect.target_balance != 0) {
-        try w.events.push(.{ .advantage_changed = .{
-            .agent_id = defender.id,
-            .engagement_with = null,
-            .axis = .balance,
-            .old_value = old_defender_balance,
-            .new_value = defender.balance,
-        } });
-    }
+    try emitIfChanged(w, attacker.id, null, .balance, old_attacker_balance, attacker.balance);
+    try emitIfChanged(w, defender.id, null, .balance, old_defender_balance, defender.balance);
 }
 
 /// Default advantage effects per outcome (used when technique has no override)
@@ -242,24 +218,9 @@ const default_advantage_effects = struct {
     };
 };
 
-/// Get advantage effect for an outcome, checking technique-specific overrides first
-pub fn getAdvantageEffect(
-    technique: *const Technique,
-    outcome: Outcome,
-    stakes: Stakes,
-) AdvantageEffect {
-    // Check for technique-specific override
-    const base: AdvantageEffect = if (technique.advantage) |adv| blk: {
-        break :blk switch (outcome) {
-            .hit => adv.on_hit orelse default_advantage_effects.hit,
-            .miss => adv.on_miss orelse default_advantage_effects.miss,
-            .blocked => adv.on_blocked orelse default_advantage_effects.blocked,
-            .parried => adv.on_parried orelse default_advantage_effects.parried,
-            .deflected => adv.on_deflected orelse default_advantage_effects.deflected,
-            .dodged => adv.on_dodged orelse default_advantage_effects.dodged,
-            .countered => adv.on_countered orelse default_advantage_effects.countered,
-        };
-    } else switch (outcome) {
+/// Default advantage effect for an outcome (when technique has no override)
+fn defaultForOutcome(outcome: Outcome) AdvantageEffect {
+    return switch (outcome) {
         .hit => default_advantage_effects.hit,
         .miss => default_advantage_effects.miss,
         .blocked => default_advantage_effects.blocked,
@@ -268,17 +229,33 @@ pub fn getAdvantageEffect(
         .dodged => default_advantage_effects.dodged,
         .countered => default_advantage_effects.countered,
     };
+}
 
-    // Scale by stakes - higher stakes = bigger swings
-    const is_success = (outcome == .hit);
-    const mult: f32 = switch (stakes) {
-        .probing => 0.5,
-        .guarded => 1.0,
-        .committed => if (is_success) 1.25 else 1.5,
-        .reckless => if (is_success) 1.5 else 2.0,
+/// Get technique-specific override for outcome, or null if not specified
+fn techniqueOverrideForOutcome(adv: TechniqueAdvantage, outcome: Outcome) ?AdvantageEffect {
+    return switch (outcome) {
+        .hit => adv.on_hit,
+        .miss => adv.on_miss,
+        .blocked => adv.on_blocked,
+        .parried => adv.on_parried,
+        .deflected => adv.on_deflected,
+        .dodged => adv.on_dodged,
+        .countered => adv.on_countered,
     };
+}
 
-    return base.scale(mult);
+/// Get advantage effect for an outcome, checking technique-specific overrides first
+pub fn getAdvantageEffect(
+    technique: *const Technique,
+    outcome: Outcome,
+    stakes: Stakes,
+) AdvantageEffect {
+    const base = if (technique.advantage) |adv|
+        techniqueOverrideForOutcome(adv, outcome) orelse defaultForOutcome(outcome)
+    else
+        defaultForOutcome(outcome);
+
+    return base.scale(stakes.advantageMultiplier(outcome == .hit));
 }
 
 // ============================================================================
@@ -287,12 +264,13 @@ pub fn getAdvantageEffect(
 
 fn getWeaponOffensive(
     weapon_template: *const weapon.Template,
-    technique_id: TechniqueID,
+    technique: *const Technique,
 ) ?*const weapon.Offensive {
-    return switch (technique_id) {
+    return switch (technique.attack_mode) {
         .thrust => if (weapon_template.thrust) |*t| t else null,
         .swing => if (weapon_template.swing) |*s| s else null,
-        else => if (weapon_template.swing) |*s| s else null,
+        .ranged => null, // TODO: add ranged profile to weapon.Template
+        .none => null, // defensive techniques don't use weapon offensive
     };
 }
 
@@ -303,7 +281,7 @@ pub fn createDamagePacket(
     stakes: Stakes,
 ) damage.Packet {
     // Get weapon offensive profile for this technique type
-    const weapon_off = getWeaponOffensive(weapon_template, technique.id);
+    const weapon_off = getWeaponOffensive(weapon_template, technique);
 
     // Base damage from technique instances
     var amount: f32 = 0;
@@ -328,12 +306,7 @@ pub fn createDamagePacket(
     }
 
     // Stakes modifier
-    amount *= switch (stakes) {
-        .probing => 0.4,
-        .guarded => 1.0,
-        .committed => 1.4,
-        .reckless => 2.0,
-    };
+    amount *= stakes.damageMultiplier();
 
     // Primary damage type from technique
     const kind: damage.Kind = if (technique.damage.instances.len > 0 and

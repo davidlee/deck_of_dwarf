@@ -105,17 +105,19 @@ pub const TechniquePool = struct {
         return (self.cooldowns.get(instance.template.id) orelse 0) == 0;
     }
 
-    /// Select next available technique instance (round-robin, skips cooldowns)
-    pub fn selectNext(self: *TechniquePool) ?*Instance {
+    /// Select next available technique instance (round-robin, skips cooldowns and unaffordable)
+    pub fn selectNext(self: *TechniquePool, available_stamina: f32) ?*Instance {
         if (self.instances.items.len == 0) return null;
 
         var attempts: usize = 0;
         while (attempts < self.instances.items.len) : (attempts += 1) {
             const instance = self.instances.items[self.next_index];
             self.next_index = (self.next_index + 1) % self.instances.items.len;
-            if (self.canUse(instance)) return instance;
+            if (self.canUse(instance) and instance.template.cost.stamina <= available_stamina) {
+                return instance;
+            }
         }
-        return null; // all on cooldown
+        return null; // all on cooldown or unaffordable
     }
 
     /// Apply cooldown to a technique (by template ID)
@@ -382,3 +384,69 @@ pub const TechniqueAdvantage = struct {
 // If mobs are smart, they can exploit split attention:
 // // Mob A feints to draw player's focus
 // // Mob B's pattern shifts to "exploit opening" when player.engagement with A shows commitment
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+const testing = std.testing;
+
+const TestTemplates = struct {
+    const expensive: cards.Template = .{
+        .id = 1,
+        .kind = .action,
+        .name = "expensive",
+        .description = "",
+        .rarity = .common,
+        .cost = .{ .stamina = 5.0, .time = 0.3 },
+        .tags = .{},
+        .rules = &.{},
+    };
+    const cheap: cards.Template = .{
+        .id = 2,
+        .kind = .action,
+        .name = "cheap",
+        .description = "",
+        .rarity = .common,
+        .cost = .{ .stamina = 2.0, .time = 0.2 },
+        .tags = .{},
+        .rules = &.{},
+    };
+};
+
+test "TechniquePool.selectNext respects stamina constraint" {
+    const alloc = testing.allocator;
+
+    const templates = &[_]*const cards.Template{&TestTemplates.expensive};
+    var pool = try TechniquePool.init(alloc, templates);
+    defer pool.deinit();
+
+    // With enough stamina, should return technique
+    const selected = pool.selectNext(10.0);
+    try testing.expect(selected != null);
+    try testing.expectEqual(@as(cards.ID, 1), selected.?.template.id);
+
+    // Reset index for next test
+    pool.next_index = 0;
+
+    // With insufficient stamina, should return null
+    const not_selected = pool.selectNext(3.0);
+    try testing.expect(not_selected == null);
+}
+
+test "TechniquePool.selectNext skips unaffordable, picks affordable" {
+    const alloc = testing.allocator;
+
+    const templates = &[_]*const cards.Template{
+        &TestTemplates.expensive, // 5.0 stamina
+        &TestTemplates.cheap, // 2.0 stamina
+    };
+    var pool = try TechniquePool.init(alloc, templates);
+    defer pool.deinit();
+
+    // With 3.0 stamina: expensive (5.0) unaffordable, cheap (2.0) affordable
+    // Should skip expensive, return cheap
+    const selected = pool.selectNext(3.0);
+    try testing.expect(selected != null);
+    try testing.expectEqual(@as(cards.ID, 2), selected.?.template.id);
+}

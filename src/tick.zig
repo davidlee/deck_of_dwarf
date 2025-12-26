@@ -140,8 +140,8 @@ pub const TickResolver = struct {
     fn commitSingleMob(self: *TickResolver, mob: *Agent) !void {
         switch (mob.cards) {
             .pool => |*pool| {
-                // Select next technique instance from pool
-                if (pool.selectNext()) |instance| {
+                // Select next technique instance from pool (respects stamina)
+                if (pool.selectNext(mob.stamina_available)) |instance| {
                     const technique = instance.template.technique orelse return;
                     const time_cost = instance.template.cost.time;
 
@@ -153,6 +153,9 @@ pub const TickResolver = struct {
                         .time_start = 0.0,
                         .time_end = time_cost,
                     });
+
+                    // Reserve stamina (mirrors player command path)
+                    mob.stamina_available -= instance.template.cost.stamina;
                 }
             },
             .deck => |*d| {

@@ -31,6 +31,7 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .thrust,
         .name = "thrust",
+        .attack_mode = .thrust,
         .target_height = .mid, // thrusts target center mass
         .damage = .{
             .instances = &.{
@@ -51,6 +52,7 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .swing,
         .name = "swing",
+        .attack_mode = .swing,
         .target_height = .high, // swings come from above
         .secondary_height = .mid, // can catch torso too
         .damage = .{
@@ -74,6 +76,7 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .feint,
         .name = "feint",
+        .attack_mode = .swing, // feints use swing-like motion
         .target_height = .high, // feints typically threaten high
         .damage = .{
             .instances = &.{.{ .amount = 0.3, .types = &.{.slash} }},
@@ -104,6 +107,7 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .deflect,
         .name = "deflect",
+        .attack_mode = .none,
         .guard_height = .mid, // mid guard, covers adjacent
         .covers_adjacent = true,
         .damage = .{
@@ -123,6 +127,7 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .parry,
         .name = "parry",
+        .attack_mode = .none,
         .guard_height = .high, // high parry
         .covers_adjacent = false,
         .damage = .{
@@ -142,6 +147,7 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .block,
         .name = "block",
+        .attack_mode = .none,
         .guard_height = .mid, // shield covers mid
         .covers_adjacent = true, // shields cover wide area
         .damage = .{
