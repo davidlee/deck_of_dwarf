@@ -479,83 +479,7 @@ test "getAdvantageEffect miss penalty scales with stakes" {
 // Integration Test Fixtures
 // ============================================================================
 
-const TestWeapons = struct {
-    pub const sword_swing = weapon.Offensive{
-        .name = "sword swing",
-        .reach = .longsword,
-        .damage_types = &.{.slash},
-        .accuracy = 1.0,
-        .speed = 1.0,
-        .damage = 1.0,
-        .penetration = 0.5,
-        .penetration_max = 2.0,
-        .fragility = 0.1,
-        .defender_modifiers = .{
-            .name = "",
-            .reach = .longsword,
-            .parry = 0.8,
-            .deflect = 0.6,
-            .block = 0.4,
-            .fragility = 0.1,
-        },
-    };
-
-    pub const sword_thrust = weapon.Offensive{
-        .name = "sword thrust",
-        .reach = .longsword,
-        .damage_types = &.{.pierce},
-        .accuracy = 0.9,
-        .speed = 1.2,
-        .damage = 0.8,
-        .penetration = 1.0,
-        .penetration_max = 4.0,
-        .fragility = 0.1,
-        .defender_modifiers = .{
-            .name = "",
-            .reach = .longsword,
-            .parry = 1.0,
-            .deflect = 0.8,
-            .block = 0.5,
-            .fragility = 0.1,
-        },
-    };
-
-    pub const sword_defence = weapon.Defensive{
-        .name = "sword defence",
-        .reach = .longsword,
-        .parry = 1.0,
-        .deflect = 0.8,
-        .block = 0.3,
-        .fragility = 0.1,
-    };
-
-    pub const sword = weapon.Template{
-        .name = "longsword",
-        .categories = &.{.sword},
-        .features = .{
-            .hooked = false,
-            .spiked = false,
-            .crossguard = true,
-            .pommel = true,
-        },
-        .grip = .{
-            .one_handed = true,
-            .two_handed = true,
-            .versatile = false,
-            .bastard = true,
-            .half_sword = true,
-            .murder_stroke = true,
-        },
-        .length = 100.0,
-        .weight = 1.5,
-        .balance = 0.3,
-        .swing = sword_swing,
-        .thrust = sword_thrust,
-        .defence = sword_defence,
-        .ranged = null,
-        .integrity = 100.0,
-    };
-};
+const weapon_list = @import("weapon_list.zig");
 
 fn makeTestWorld(alloc: std.mem.Allocator) !*World {
     return World.init(alloc);
@@ -610,7 +534,7 @@ test "resolveTechniqueVsDefense emits technique_resolved event" {
         .attacker = attacker,
         .defender = defender,
         .technique = technique,
-        .weapon_template = &TestWeapons.sword,
+        .weapon_template = &weapon_list.knights_sword,
         .stakes = .guarded,
         .engagement = engagement,
     };
@@ -618,7 +542,7 @@ test "resolveTechniqueVsDefense emits technique_resolved event" {
     const defense = DefenseContext{
         .defender = defender,
         .technique = null, // passive defense
-        .weapon_template = &TestWeapons.sword,
+        .weapon_template = &weapon_list.knights_sword,
     };
 
     // Get a target body part
@@ -668,7 +592,7 @@ test "resolveTechniqueVsDefense emits advantage_changed events on hit" {
         .attacker = attacker,
         .defender = defender,
         .technique = technique,
-        .weapon_template = &TestWeapons.sword,
+        .weapon_template = &weapon_list.knights_sword,
         .stakes = .committed, // higher stakes = bigger advantage swings
         .engagement = engagement,
     };
@@ -676,7 +600,7 @@ test "resolveTechniqueVsDefense emits advantage_changed events on hit" {
     const defense = DefenseContext{
         .defender = defender,
         .technique = null,
-        .weapon_template = &TestWeapons.sword,
+        .weapon_template = &weapon_list.knights_sword,
     };
 
     const target_part: body.PartIndex = 0;
@@ -736,7 +660,7 @@ test "resolveTechniqueVsDefense applies damage on hit" {
         .attacker = attacker,
         .defender = defender,
         .technique = technique,
-        .weapon_template = &TestWeapons.sword,
+        .weapon_template = &weapon_list.knights_sword,
         .stakes = .reckless, // maximum damage
         .engagement = engagement,
     };
@@ -744,7 +668,7 @@ test "resolveTechniqueVsDefense applies damage on hit" {
     const defense = DefenseContext{
         .defender = defender,
         .technique = null,
-        .weapon_template = &TestWeapons.sword,
+        .weapon_template = &weapon_list.knights_sword,
     };
 
     const target_part: body.PartIndex = 0;
@@ -825,10 +749,10 @@ test "createDamagePacket scales by stakes" {
 
     const technique = &cards.Technique.byID(.swing);
 
-    const probing = createDamagePacket(technique, &TestWeapons.sword, attacker, .probing);
-    const guarded = createDamagePacket(technique, &TestWeapons.sword, attacker, .guarded);
-    const committed = createDamagePacket(technique, &TestWeapons.sword, attacker, .committed);
-    const reckless = createDamagePacket(technique, &TestWeapons.sword, attacker, .reckless);
+    const probing = createDamagePacket(technique, &weapon_list.knights_sword, attacker, .probing);
+    const guarded = createDamagePacket(technique, &weapon_list.knights_sword, attacker, .guarded);
+    const committed = createDamagePacket(technique, &weapon_list.knights_sword, attacker, .committed);
+    const reckless = createDamagePacket(technique, &weapon_list.knights_sword, attacker, .reckless);
 
     // Damage should increase with stakes
     try std.testing.expect(probing.amount < guarded.amount);

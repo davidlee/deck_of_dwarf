@@ -25,6 +25,7 @@ pub const Reach = enum {
     spear,
     longsword,
     sabre,
+    mace,
     dagger,
     clinch,
 };

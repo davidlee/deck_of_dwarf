@@ -201,4 +201,16 @@ pub fn build(b: *std.Build) !void {
 
     const run_resolution_tests = b.addRunArtifact(resolution_tests);
     test_step.dependOn(&run_resolution_tests.step);
+
+    // Weapon list tests
+    const weapon_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/weapon_list.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_weapon_tests = b.addRunArtifact(weapon_tests);
+    test_step.dependOn(&run_weapon_tests.step);
 }

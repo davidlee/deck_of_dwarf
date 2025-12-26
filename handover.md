@@ -110,13 +110,14 @@ These feed into `calculateHitChance`.
 
 ### Working
 - `resolution.zig` created and compiling
-- All 71 tests passing (23 body + 48 resolution)
+- All 82 tests passing (23 body + 53 resolution + 6 weapon_list)
 - Armor resolution complete with events
 - Body/wound system complete with events
 - Card playing and event system working
 - Agent/Engagement structures in place
 - Resolution events: `technique_resolved`, `advantage_changed` (Step 1 complete)
 - Integration tests verifying full resolution flow (Step 2 complete)
+- Weapon templates: 8 melee weapons in `weapon_list.zig` with realistic stats
 
 ### Stubbed/TODO in resolution.zig
 - `selectHitLocation` — simple random, needs technique/engagement weighting
@@ -277,9 +278,10 @@ zig build test --summary all
 ## Files Modified This Session
 
 - Created: `src/resolution.zig`
-- Modified: `src/main.zig` (added resolution import)
+- Created: `src/weapon_list.zig` (8 weapon templates: horseman's mace, footman's axe, greataxe, knight's sword, falchion, dirk, spear, buckler)
+- Modified: `src/main.zig` (added resolution, weapon_list imports)
 - Modified: `src/events.zig` (added `technique_resolved`, `advantage_changed` events)
-- Modified: `src/resolution.zig` (added `applyWithEvents`, integration tests, test fixtures)
+- Modified: `src/resolution.zig` (added `applyWithEvents`, integration tests using weapon_list)
 - Modified: `src/combat.zig` (pub Director, fixed Agent.init armour, Agent.deinit cleanup)
 - Modified: `src/body.zig` (pub applyDamageToPart)
 - Modified: `src/random.zig` (pub RandomStreamDict.get)
@@ -287,7 +289,7 @@ zig build test --summary all
 - Modified: `src/armour.zig` ([]const for Material/Pattern slices)
 - Modified: `src/weapon.zig` ([]const for damage_types, categories)
 - Modified: `src/cards.zig` (inline for, @tagName for compileError)
-- Modified: `build.zig` (added resolution.zig test module)
+- Modified: `build.zig` (added resolution.zig, weapon_list.zig test modules)
 
 ## Open Design Questions
 
