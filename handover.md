@@ -110,7 +110,7 @@ These feed into `calculateHitChance`.
 
 ### Working
 - `resolution.zig` created and compiling
-- All 85 tests passing (23 body + 56 resolution + 6 weapon_list)
+- All 90 tests passing (23 body + 61 resolution + 6 weapon_list)
 - Armor resolution complete with events
 - Body/wound system complete with events
 - Card playing and event system working
@@ -119,10 +119,11 @@ These feed into `calculateHitChance`.
 - Integration tests verifying full resolution flow (Step 2 complete)
 - Weapon templates: 8 melee weapons in `weapon_list.zig` with realistic stats
 - Technique-specific advantage profiles (Step 3 complete)
+- Hit location weighting with height targeting (Step 4 complete)
 
-### Stubbed/TODO in resolution.zig
-- `selectHitLocation` — simple random, needs technique/engagement weighting
+### Stubbed/TODO
 - Not wired into game loop
+- Compositional stance system (see `doc/stance_design.md`) — deferred, MVP uses static exposure tables
 
 ## Implementation Plan
 
@@ -218,18 +219,42 @@ Example technique with override (feint in `card_list.zig`):
 
 Bug fix: `deflect` technique had wrong id (`.swing` → `.deflect`).
 
-### Step 4: Hit Location Weighting
+### Step 4: Hit Location Weighting ✓ COMPLETE
 
-Enhance `selectHitLocation`:
+MVP height-based targeting system implemented:
 
-1. Technique weighting (thrust → torso/head, swing → arms/torso)
-2. Engagement weighting (flanking → back, position advantage → gaps)
-3. Weapon reach interaction (inside spear range → different targets)
+**Added to `body.zig`:**
+- `Height` enum `{ low, mid, high }` with `adjacent()` method
+- `Exposure` struct with tag, side, base_chance, height
+- `humanoid_exposures` static table (31 entries across all heights)
 
-Consider adding to `Technique`:
-```zig
-hit_weights: ?[]const struct { tag: body.PartTag, weight: f32 } = null,
-```
+**Added to `cards.zig` Technique:**
+- `target_height: Height = .mid` — primary attack zone
+- `secondary_height: ?Height = null` — for attacks spanning zones (e.g., swing high→mid)
+- `guard_height: ?Height = null` — defense guard position
+- `covers_adjacent: bool = false` — whether guard covers adjacent heights
+
+**Updated `resolution.zig`:**
+- `selectHitLocationFromExposures()` — pure function with height weighting
+- `getHeightMultiplier()` — primary (2x), secondary (1x), adjacent (0.5x), off-target (0.1x)
+- Defense coverage reduces guarded zone hit chance (0.3x direct, 0.6x adjacent)
+- `calculateHitChance()` now includes height coverage in hit chance calculation
+
+**Updated techniques in `card_list.zig`:**
+- `thrust`: targets mid
+- `swing`: targets high, secondary mid
+- `feint`: targets high
+- `deflect`: guards mid, covers adjacent
+- `parry`: guards high
+- `block`: guards mid, covers adjacent
+
+5 new tests for height targeting logic.
+
+**Deferred:**
+- Compositional stance synthesis (grip + arm + body contributions) — see `doc/stance_design.md`
+- Relative angle / flanking
+- Attack arc (overhead/level/rising)
+- L/R side preference
 
 ### Step 5: Simultaneous Resolution Loop
 
@@ -301,11 +326,14 @@ zig build test --summary all
 
 - Created: `src/resolution.zig`
 - Created: `src/weapon_list.zig` (8 weapon templates: horseman's mace, footman's axe, greataxe, knight's sword, falchion, dirk, spear, buckler)
+- Created: `doc/stance_design.md` (full stance system design, compositional model)
 - Modified: `src/main.zig` (added resolution, weapon_list imports)
 - Modified: `src/events.zig` (added `technique_resolved`, `advantage_changed` events)
-- Modified: `src/resolution.zig` (added `applyWithEvents`, integration tests using weapon_list)
+- Modified: `src/resolution.zig` (added `applyWithEvents`, integration tests, height-weighted `selectHitLocation`)
 - Modified: `src/combat.zig` (pub Director, fixed Agent.init armour, Agent.deinit cleanup, added AdvantageEffect+TechniqueAdvantage)
-- Modified: `src/body.zig` (pub applyDamageToPart)
+- Modified: `src/body.zig` (pub applyDamageToPart, added Height enum, Exposure struct, humanoid_exposures table)
+- Modified: `src/cards.zig` (added target_height, secondary_height, guard_height, covers_adjacent to Technique)
+- Modified: `src/card_list.zig` (added height targeting to all techniques)
 - Modified: `src/random.zig` (pub RandomStreamDict.get)
 - Modified: `src/world.zig` (fixed double-deinit bug in World.deinit)
 - Modified: `src/armour.zig` ([]const for Material/Pattern slices)

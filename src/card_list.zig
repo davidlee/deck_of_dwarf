@@ -1,6 +1,7 @@
 const std = @import("std");
 const Event = @import("events.zig").Event;
 
+const body = @import("body.zig");
 const cards = @import("cards.zig");
 const combat = @import("combat.zig");
 const damage = @import("damage.zig");
@@ -30,6 +31,7 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .thrust,
         .name = "thrust",
+        .target_height = .mid, // thrusts target center mass
         .damage = .{
             .instances = &.{
                 .{ .amount = 1.0, .types = &.{.pierce} },
@@ -49,6 +51,8 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .swing,
         .name = "swing",
+        .target_height = .high, // swings come from above
+        .secondary_height = .mid, // can catch torso too
         .damage = .{
             .instances = &.{
                 .{ .amount = 1.0, .types = &.{.slash} },
@@ -70,6 +74,7 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .feint,
         .name = "feint",
+        .target_height = .high, // feints typically threaten high
         .damage = .{
             .instances = &.{.{ .amount = 0.3, .types = &.{.slash} }},
             .scaling = .{
@@ -95,10 +100,12 @@ pub const TechniqueEntries = [_]Technique{
         },
     },
 
-    // TODO:  separate defensive tactics out
+    // Defensive techniques - guard positions
     .{
         .id = .deflect,
         .name = "deflect",
+        .guard_height = .mid, // mid guard, covers adjacent
+        .covers_adjacent = true,
         .damage = .{
             .instances = &.{.{ .amount = 0.0, .types = &.{} }},
             .scaling = .{
@@ -116,6 +123,8 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .parry,
         .name = "parry",
+        .guard_height = .high, // high parry
+        .covers_adjacent = false,
         .damage = .{
             .instances = &.{.{ .amount = 0.0, .types = &.{} }},
             .scaling = .{
@@ -133,6 +142,8 @@ pub const TechniqueEntries = [_]Technique{
     .{
         .id = .block,
         .name = "block",
+        .guard_height = .mid, // shield covers mid
+        .covers_adjacent = true, // shields cover wide area
         .damage = .{
             .instances = &.{.{ .amount = 0.0, .types = &.{} }},
             .scaling = .{

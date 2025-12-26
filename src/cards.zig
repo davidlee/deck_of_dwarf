@@ -153,7 +153,13 @@ pub const Technique = struct {
     difficulty: f32,
     exclusivity: Exclusivity = .weapon,
 
-    // region: null, // hit location weighting
+    // Hit location targeting
+    target_height: body.Height = .mid,
+    secondary_height: ?body.Height = null, // for attacks that span zones
+
+    // Defense guard position (for defensive techniques)
+    guard_height: ?body.Height = null, // null = not a defensive technique
+    covers_adjacent: bool = false, // if true, partial coverage of adjacent heights
 
     // multiplier for defender's roll (0.0 - 2.0):
     deflect_mult: f32 = 1.0,

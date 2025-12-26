@@ -71,6 +71,73 @@ pub const Side = enum(u8) {
     none,
 };
 
+pub const Height = enum(u8) {
+    low,
+    mid,
+    high,
+
+    pub fn adjacent(self: Height, other: Height) bool {
+        return switch (self) {
+            .low => other == .mid,
+            .mid => true, // mid is adjacent to both
+            .high => other == .mid,
+        };
+    }
+};
+
+// ============================================================================
+// Stance / Exposure (MVP: static tables, no composition yet)
+// ============================================================================
+
+pub const Exposure = struct {
+    tag: PartTag,
+    side: Side,
+    base_chance: f32,
+    height: Height,
+};
+
+/// Default humanoid exposure table - standing, facing opponent
+/// Probabilities sum to ~1.0 (minor rounding)
+pub const humanoid_exposures = [_]Exposure{
+    // High zone
+    .{ .tag = .head, .side = .center, .base_chance = 0.08, .height = .high },
+    .{ .tag = .neck, .side = .center, .base_chance = 0.03, .height = .high },
+    .{ .tag = .eye, .side = .left, .base_chance = 0.005, .height = .high },
+    .{ .tag = .eye, .side = .right, .base_chance = 0.005, .height = .high },
+    .{ .tag = .ear, .side = .left, .base_chance = 0.005, .height = .high },
+    .{ .tag = .ear, .side = .right, .base_chance = 0.005, .height = .high },
+    .{ .tag = .nose, .side = .center, .base_chance = 0.01, .height = .high },
+
+    // Mid zone
+    .{ .tag = .torso, .side = .center, .base_chance = 0.25, .height = .mid },
+    .{ .tag = .abdomen, .side = .center, .base_chance = 0.12, .height = .mid },
+    .{ .tag = .shoulder, .side = .left, .base_chance = 0.025, .height = .mid },
+    .{ .tag = .shoulder, .side = .right, .base_chance = 0.025, .height = .mid },
+    .{ .tag = .arm, .side = .left, .base_chance = 0.03, .height = .mid },
+    .{ .tag = .arm, .side = .right, .base_chance = 0.03, .height = .mid },
+    .{ .tag = .elbow, .side = .left, .base_chance = 0.01, .height = .mid },
+    .{ .tag = .elbow, .side = .right, .base_chance = 0.01, .height = .mid },
+    .{ .tag = .forearm, .side = .left, .base_chance = 0.02, .height = .mid },
+    .{ .tag = .forearm, .side = .right, .base_chance = 0.02, .height = .mid },
+    .{ .tag = .wrist, .side = .left, .base_chance = 0.008, .height = .mid },
+    .{ .tag = .wrist, .side = .right, .base_chance = 0.008, .height = .mid },
+    .{ .tag = .hand, .side = .left, .base_chance = 0.012, .height = .mid },
+    .{ .tag = .hand, .side = .right, .base_chance = 0.012, .height = .mid },
+
+    // Low zone
+    .{ .tag = .groin, .side = .center, .base_chance = 0.02, .height = .low },
+    .{ .tag = .thigh, .side = .left, .base_chance = 0.04, .height = .low },
+    .{ .tag = .thigh, .side = .right, .base_chance = 0.04, .height = .low },
+    .{ .tag = .knee, .side = .left, .base_chance = 0.015, .height = .low },
+    .{ .tag = .knee, .side = .right, .base_chance = 0.015, .height = .low },
+    .{ .tag = .shin, .side = .left, .base_chance = 0.025, .height = .low },
+    .{ .tag = .shin, .side = .right, .base_chance = 0.025, .height = .low },
+    .{ .tag = .ankle, .side = .left, .base_chance = 0.008, .height = .low },
+    .{ .tag = .ankle, .side = .right, .base_chance = 0.008, .height = .low },
+    .{ .tag = .foot, .side = .left, .base_chance = 0.012, .height = .low },
+    .{ .tag = .foot, .side = .right, .base_chance = 0.012, .height = .low },
+};
+
 pub const TissueLayer = enum {
     organ,
     cartilage,
@@ -187,7 +254,7 @@ pub const PartDef = struct {
     tag: PartTag,
     side: Side,
     name: []const u8,
-    base_hit_chance: f32,
+    base_hit_chance: f32, // WARN: deprecated, we use the temporary static exposure table above, to be replaced - see `doc/stance_design.md`
     base_durability: f32,
     trauma_mult: f32,
     flags: Flags = .{},
