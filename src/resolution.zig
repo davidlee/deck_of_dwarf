@@ -124,137 +124,135 @@ pub fn resolveOutcome(
 // Advantage Effects
 // ============================================================================
 
-pub const AdvantageEffect = struct {
-    pressure: f32 = 0,
-    control: f32 = 0,
-    position: f32 = 0,
-    self_balance: f32 = 0,
-    target_balance: f32 = 0,
+pub const AdvantageEffect = combat.AdvantageEffect;
+pub const TechniqueAdvantage = combat.TechniqueAdvantage;
 
-    pub fn apply(
-        self: AdvantageEffect,
-        engagement: *Engagement,
-        attacker: *Agent,
-        defender: *Agent,
-    ) void {
-        engagement.pressure = std.math.clamp(engagement.pressure + self.pressure, 0, 1);
-        engagement.control = std.math.clamp(engagement.control + self.control, 0, 1);
-        engagement.position = std.math.clamp(engagement.position + self.position, 0, 1);
-        attacker.balance = std.math.clamp(attacker.balance + self.self_balance, 0, 1);
-        defender.balance = std.math.clamp(defender.balance + self.target_balance, 0, 1);
+/// Apply advantage effects and emit events for any changes
+pub fn applyAdvantageWithEvents(
+    effect: AdvantageEffect,
+    w: *World,
+    engagement: *Engagement,
+    attacker: *Agent,
+    defender: *Agent,
+) !void {
+    // Capture old values
+    const old_pressure = engagement.pressure;
+    const old_control = engagement.control;
+    const old_position = engagement.position;
+    const old_attacker_balance = attacker.balance;
+    const old_defender_balance = defender.balance;
+
+    // Apply changes
+    effect.apply(engagement, attacker, defender);
+
+    // Emit events for changed values
+    // Engagement changes are relative to defender (engagement stored on mob)
+    if (effect.pressure != 0) {
+        try w.events.push(.{ .advantage_changed = .{
+            .agent_id = defender.id,
+            .engagement_with = attacker.id,
+            .axis = .pressure,
+            .old_value = old_pressure,
+            .new_value = engagement.pressure,
+        } });
     }
-
-    pub fn scale(self: AdvantageEffect, mult: f32) AdvantageEffect {
-        return .{
-            .pressure = self.pressure * mult,
-            .control = self.control * mult,
-            .position = self.position * mult,
-            .self_balance = self.self_balance * mult,
-            .target_balance = self.target_balance * mult,
-        };
+    if (effect.control != 0) {
+        try w.events.push(.{ .advantage_changed = .{
+            .agent_id = defender.id,
+            .engagement_with = attacker.id,
+            .axis = .control,
+            .old_value = old_control,
+            .new_value = engagement.control,
+        } });
     }
-
-    /// Apply advantage effects and emit events for any changes
-    pub fn applyWithEvents(
-        self: AdvantageEffect,
-        w: *World,
-        engagement: *Engagement,
-        attacker: *Agent,
-        defender: *Agent,
-    ) !void {
-        // Capture old values
-        const old_pressure = engagement.pressure;
-        const old_control = engagement.control;
-        const old_position = engagement.position;
-        const old_attacker_balance = attacker.balance;
-        const old_defender_balance = defender.balance;
-
-        // Apply changes
-        self.apply(engagement, attacker, defender);
-
-        // Emit events for changed values
-        // Engagement changes are relative to defender (engagement stored on mob)
-        if (self.pressure != 0) {
-            try w.events.push(.{ .advantage_changed = .{
-                .agent_id = defender.id,
-                .engagement_with = attacker.id,
-                .axis = .pressure,
-                .old_value = old_pressure,
-                .new_value = engagement.pressure,
-            } });
-        }
-        if (self.control != 0) {
-            try w.events.push(.{ .advantage_changed = .{
-                .agent_id = defender.id,
-                .engagement_with = attacker.id,
-                .axis = .control,
-                .old_value = old_control,
-                .new_value = engagement.control,
-            } });
-        }
-        if (self.position != 0) {
-            try w.events.push(.{ .advantage_changed = .{
-                .agent_id = defender.id,
-                .engagement_with = attacker.id,
-                .axis = .position,
-                .old_value = old_position,
-                .new_value = engagement.position,
-            } });
-        }
-        // Balance is intrinsic (engagement_with = null)
-        if (self.self_balance != 0) {
-            try w.events.push(.{ .advantage_changed = .{
-                .agent_id = attacker.id,
-                .engagement_with = null,
-                .axis = .balance,
-                .old_value = old_attacker_balance,
-                .new_value = attacker.balance,
-            } });
-        }
-        if (self.target_balance != 0) {
-            try w.events.push(.{ .advantage_changed = .{
-                .agent_id = defender.id,
-                .engagement_with = null,
-                .axis = .balance,
-                .old_value = old_defender_balance,
-                .new_value = defender.balance,
-            } });
-        }
+    if (effect.position != 0) {
+        try w.events.push(.{ .advantage_changed = .{
+            .agent_id = defender.id,
+            .engagement_with = attacker.id,
+            .axis = .position,
+            .old_value = old_position,
+            .new_value = engagement.position,
+        } });
     }
+    // Balance is intrinsic (engagement_with = null)
+    if (effect.self_balance != 0) {
+        try w.events.push(.{ .advantage_changed = .{
+            .agent_id = attacker.id,
+            .engagement_with = null,
+            .axis = .balance,
+            .old_value = old_attacker_balance,
+            .new_value = attacker.balance,
+        } });
+    }
+    if (effect.target_balance != 0) {
+        try w.events.push(.{ .advantage_changed = .{
+            .agent_id = defender.id,
+            .engagement_with = null,
+            .axis = .balance,
+            .old_value = old_defender_balance,
+            .new_value = defender.balance,
+        } });
+    }
+}
+
+/// Default advantage effects per outcome (used when technique has no override)
+const default_advantage_effects = struct {
+    const hit: AdvantageEffect = .{
+        .pressure = 0.15,
+        .control = 0.10,
+        .target_balance = -0.15,
+    };
+    const miss: AdvantageEffect = .{
+        .control = -0.15,
+        .self_balance = -0.10,
+    };
+    const blocked: AdvantageEffect = .{
+        .pressure = 0.05,
+        .control = -0.05,
+    };
+    const parried: AdvantageEffect = .{
+        .control = -0.20,
+        .self_balance = -0.05,
+    };
+    const deflected: AdvantageEffect = .{
+        .pressure = 0.05,
+        .control = -0.10,
+    };
+    const dodged: AdvantageEffect = .{
+        .control = -0.10,
+        .self_balance = -0.05,
+    };
+    const countered: AdvantageEffect = .{
+        .control = -0.25,
+        .self_balance = -0.15,
+    };
 };
 
-/// Get advantage effect for a technique outcome
-pub fn getAdvantageEffect(outcome: Outcome, stakes: Stakes) AdvantageEffect {
-    const base: AdvantageEffect = switch (outcome) {
-        .hit => .{
-            .pressure = 0.15,
-            .control = 0.10,
-            .target_balance = -0.15,
-        },
-        .miss => .{
-            .control = -0.15,
-            .self_balance = -0.10,
-        },
-        .blocked => .{
-            .pressure = 0.05,
-            .control = -0.05,
-        },
-        .parried => .{
-            .control = -0.20,
-            .self_balance = -0.05,
-        },
-        .deflected => .{
-            .pressure = 0.05,
-            .control = -0.10,
-        },
-        .dodged => .{
-            .control = -0.10,
-            .self_balance = -0.05,
-        },
-        .countered => .{
-            .control = -0.25,
-            .self_balance = -0.15,
-        },
+/// Get advantage effect for an outcome, checking technique-specific overrides first
+pub fn getAdvantageEffect(
+    technique: *const Technique,
+    outcome: Outcome,
+    stakes: Stakes,
+) AdvantageEffect {
+    // Check for technique-specific override
+    const base: AdvantageEffect = if (technique.advantage) |adv| blk: {
+        break :blk switch (outcome) {
+            .hit => adv.on_hit orelse default_advantage_effects.hit,
+            .miss => adv.on_miss orelse default_advantage_effects.miss,
+            .blocked => adv.on_blocked orelse default_advantage_effects.blocked,
+            .parried => adv.on_parried orelse default_advantage_effects.parried,
+            .deflected => adv.on_deflected orelse default_advantage_effects.deflected,
+            .dodged => adv.on_dodged orelse default_advantage_effects.dodged,
+            .countered => adv.on_countered orelse default_advantage_effects.countered,
+        };
+    } else switch (outcome) {
+        .hit => default_advantage_effects.hit,
+        .miss => default_advantage_effects.miss,
+        .blocked => default_advantage_effects.blocked,
+        .parried => default_advantage_effects.parried,
+        .deflected => default_advantage_effects.deflected,
+        .dodged => default_advantage_effects.dodged,
+        .countered => default_advantage_effects.countered,
     };
 
     // Scale by stakes - higher stakes = bigger swings
@@ -366,8 +364,8 @@ pub fn resolveTechniqueVsDefense(
     const outcome = try resolveOutcome(w, attack, defense);
 
     // 2. Calculate and apply advantage effects (with events)
-    const adv_effect = getAdvantageEffect(outcome, attack.stakes);
-    try adv_effect.applyWithEvents(w, attack.engagement, attack.attacker, attack.defender);
+    const adv_effect = getAdvantageEffect(attack.technique, outcome, attack.stakes);
+    try applyAdvantageWithEvents(adv_effect, w, attack.engagement, attack.attacker, attack.defender);
 
     // 3. If hit, create damage packet and resolve through armor/body
     var dmg_packet: ?damage.Packet = null;
@@ -460,19 +458,99 @@ test "calculateHitChance base case" {
 }
 
 test "getAdvantageEffect scales by stakes" {
-    const base_hit = getAdvantageEffect(.hit, .guarded);
-    const reckless_hit = getAdvantageEffect(.hit, .reckless);
+    const technique = &cards.Technique.byID(.swing);
+    const base_hit = getAdvantageEffect(technique, .hit, .guarded);
+    const reckless_hit = getAdvantageEffect(technique, .hit, .reckless);
 
     // Reckless should have higher pressure gain
     try std.testing.expect(reckless_hit.pressure > base_hit.pressure);
 }
 
 test "getAdvantageEffect miss penalty scales with stakes" {
-    const guarded_miss = getAdvantageEffect(.miss, .guarded);
-    const reckless_miss = getAdvantageEffect(.miss, .reckless);
+    const technique = &cards.Technique.byID(.swing);
+    const guarded_miss = getAdvantageEffect(technique, .miss, .guarded);
+    const reckless_miss = getAdvantageEffect(technique, .miss, .reckless);
 
     // Reckless miss should have bigger balance penalty
     try std.testing.expect(reckless_miss.self_balance < guarded_miss.self_balance);
+}
+
+test "getAdvantageEffect uses technique override when present" {
+    // Technique with custom on_hit advantage
+    const custom_technique = Technique{
+        .id = .feint, // use feint as test case
+        .name = "test_feint",
+        .damage = .{
+            .instances = &.{.{ .amount = 0.5, .types = &.{.slash} }},
+            .scaling = .{ .ratio = 0.5, .stats = .{ .stat = .speed } },
+        },
+        .difficulty = 0.5,
+        .advantage = .{
+            .on_hit = .{
+                .pressure = 0.30, // higher than default 0.15
+                .control = 0.25, // higher than default 0.10
+                .position = 0.10, // default has 0
+            },
+            // other outcomes use defaults
+        },
+    };
+
+    const custom_effect = getAdvantageEffect(&custom_technique, .hit, .guarded);
+    const default_technique = &cards.Technique.byID(.swing);
+    const default_effect = getAdvantageEffect(default_technique, .hit, .guarded);
+
+    // Custom technique should have higher pressure/control on hit
+    try std.testing.expectApproxEqAbs(@as(f32, 0.30), custom_effect.pressure, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.25), custom_effect.control, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.10), custom_effect.position, 0.001);
+
+    // Default technique should have standard values
+    try std.testing.expectApproxEqAbs(@as(f32, 0.15), default_effect.pressure, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.10), default_effect.control, 0.001);
+}
+
+test "getAdvantageEffect falls back to default for unspecified outcomes" {
+    // Technique with only on_hit override
+    const partial_technique = Technique{
+        .id = .feint,
+        .name = "partial_feint",
+        .damage = .{
+            .instances = &.{.{ .amount = 0.5, .types = &.{.slash} }},
+            .scaling = .{ .ratio = 0.5, .stats = .{ .stat = .speed } },
+        },
+        .difficulty = 0.5,
+        .advantage = .{
+            .on_hit = .{ .pressure = 0.50 }, // only on_hit specified
+            // on_miss, on_blocked, etc use defaults
+        },
+    };
+
+    // on_miss should use default even though technique has advantage struct
+    const miss_effect = getAdvantageEffect(&partial_technique, .miss, .guarded);
+    try std.testing.expectApproxEqAbs(@as(f32, -0.15), miss_effect.control, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, -0.10), miss_effect.self_balance, 0.001);
+}
+
+test "getAdvantageEffect scales technique override by stakes" {
+    const custom_technique = Technique{
+        .id = .feint,
+        .name = "scaled_feint",
+        .damage = .{
+            .instances = &.{.{ .amount = 0.5, .types = &.{.slash} }},
+            .scaling = .{ .ratio = 0.5, .stats = .{ .stat = .speed } },
+        },
+        .difficulty = 0.5,
+        .advantage = .{
+            .on_hit = .{ .pressure = 0.20 },
+        },
+    };
+
+    const guarded = getAdvantageEffect(&custom_technique, .hit, .guarded);
+    const reckless = getAdvantageEffect(&custom_technique, .hit, .reckless);
+
+    // Guarded = 1.0x, reckless hit = 1.5x
+    try std.testing.expectApproxEqAbs(@as(f32, 0.20), guarded.pressure, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.30), reckless.pressure, 0.001);
 }
 
 // ============================================================================

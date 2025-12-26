@@ -2,6 +2,7 @@ const std = @import("std");
 const Event = @import("events.zig").Event;
 
 const cards = @import("cards.zig");
+const combat = @import("combat.zig");
 const damage = @import("damage.zig");
 const stats = @import("stats.zig");
 
@@ -64,9 +65,39 @@ pub const TechniqueEntries = [_]Technique{
         .parry_mult = 1.2,
     },
 
+    // Feint: deceptive attack that gains control advantage
+    // Low damage but excellent for setting up follow-ups
+    .{
+        .id = .feint,
+        .name = "feint",
+        .damage = .{
+            .instances = &.{.{ .amount = 0.3, .types = &.{.slash} }},
+            .scaling = .{
+                .ratio = 0.3,
+                .stats = .{ .stat = .speed },
+            },
+        },
+        .difficulty = 0.3, // easy to execute
+        .deflect_mult = 0.7, // hard to deflect (deceptive)
+        .dodge_mult = 1.3, // easy to dodge (not committed)
+        .counter_mult = 0.5, // very hard to counter
+        .parry_mult = 0.8, // hard to parry
+        // Feint-specific advantage: big control gain, minimal miss penalty
+        .advantage = .{
+            .on_hit = .{
+                .pressure = 0.05, // low pressure (not threatening)
+                .control = 0.25, // high control gain (initiative)
+            },
+            .on_miss = .{
+                .control = -0.05, // minimal penalty (was never committed)
+                .self_balance = -0.02,
+            },
+        },
+    },
+
     // TODO:  separate defensive tactics out
     .{
-        .id = .swing,
+        .id = .deflect,
         .name = "deflect",
         .damage = .{
             .instances = &.{.{ .amount = 0.0, .types = &.{} }},

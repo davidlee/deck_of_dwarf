@@ -161,6 +161,9 @@ pub const Technique = struct {
     dodge_mult: f32 = 1.0,
     counter_mult: f32 = 1.0,
 
+    // technique-specific advantage overrides (null = use defaults)
+    advantage: ?combat.TechniqueAdvantage = null,
+
     pub fn byID(comptime id: TechniqueID) Technique {
         inline for (TechniqueEntries) |tn| {
             if (tn.id == id) return tn;

@@ -110,7 +110,7 @@ These feed into `calculateHitChance`.
 
 ### Working
 - `resolution.zig` created and compiling
-- All 82 tests passing (23 body + 53 resolution + 6 weapon_list)
+- All 85 tests passing (23 body + 56 resolution + 6 weapon_list)
 - Armor resolution complete with events
 - Body/wound system complete with events
 - Card playing and event system working
@@ -118,10 +118,10 @@ These feed into `calculateHitChance`.
 - Resolution events: `technique_resolved`, `advantage_changed` (Step 1 complete)
 - Integration tests verifying full resolution flow (Step 2 complete)
 - Weapon templates: 8 melee weapons in `weapon_list.zig` with realistic stats
+- Technique-specific advantage profiles (Step 3 complete)
 
 ### Stubbed/TODO in resolution.zig
 - `selectHitLocation` — simple random, needs technique/engagement weighting
-- No technique-specific advantage overrides yet
 - Not wired into game loop
 
 ## Implementation Plan
@@ -174,27 +174,49 @@ Bug fixes required:
 - Various type visibility (`Director`, `applyDamageToPart`, `RandomStreamDict.get`)
 - Slice types fixed to `[]const` for comptime array coercion
 
-### Step 3: Technique-Specific Advantage Profiles
+### Step 3: Technique-Specific Advantage Profiles ✓ COMPLETE
 
-Option A: Add to `cards.Technique`:
+Implemented Option A with types in `combat.zig`:
+
 ```zig
-pub const Technique = struct {
-    // existing fields...
-
-    advantage: ?TechniqueAdvantage = null,  // override defaults
+// combat.zig
+pub const AdvantageEffect = struct {
+    pressure: f32 = 0,
+    control: f32 = 0,
+    position: f32 = 0,
+    self_balance: f32 = 0,
+    target_balance: f32 = 0,
+    // apply(), scale() methods
 };
 
 pub const TechniqueAdvantage = struct {
     on_hit: ?AdvantageEffect = null,
     on_miss: ?AdvantageEffect = null,
     on_blocked: ?AdvantageEffect = null,
-    // etc.
+    on_parried: ?AdvantageEffect = null,
+    on_deflected: ?AdvantageEffect = null,
+    on_dodged: ?AdvantageEffect = null,
+    on_countered: ?AdvantageEffect = null,
 };
+
+// cards.zig - Technique now has:
+advantage: ?combat.TechniqueAdvantage = null,
 ```
 
-Option B: Lookup table by `TechniqueID` in resolution.zig.
+`getAdvantageEffect(technique, outcome, stakes)` now:
+1. Checks technique-specific override first
+2. Falls back to defaults per-outcome if no override
+3. Scales result by stakes
 
-Update `getAdvantageEffect` to check for technique-specific overrides.
+Example technique with override (feint in `card_list.zig`):
+```zig
+.advantage = .{
+    .on_hit = .{ .pressure = 0.05, .control = 0.25 },  // high control, low pressure
+    .on_miss = .{ .control = -0.05, .self_balance = -0.02 },  // minimal penalty
+},
+```
+
+Bug fix: `deflect` technique had wrong id (`.swing` → `.deflect`).
 
 ### Step 4: Hit Location Weighting
 
@@ -282,21 +304,22 @@ zig build test --summary all
 - Modified: `src/main.zig` (added resolution, weapon_list imports)
 - Modified: `src/events.zig` (added `technique_resolved`, `advantage_changed` events)
 - Modified: `src/resolution.zig` (added `applyWithEvents`, integration tests using weapon_list)
-- Modified: `src/combat.zig` (pub Director, fixed Agent.init armour, Agent.deinit cleanup)
+- Modified: `src/combat.zig` (pub Director, fixed Agent.init armour, Agent.deinit cleanup, added AdvantageEffect+TechniqueAdvantage)
 - Modified: `src/body.zig` (pub applyDamageToPart)
 - Modified: `src/random.zig` (pub RandomStreamDict.get)
 - Modified: `src/world.zig` (fixed double-deinit bug in World.deinit)
 - Modified: `src/armour.zig` ([]const for Material/Pattern slices)
 - Modified: `src/weapon.zig` ([]const for damage_types, categories)
-- Modified: `src/cards.zig` (inline for, @tagName for compileError)
+- Modified: `src/cards.zig` (inline for, @tagName for compileError, added advantage field to Technique)
+- Modified: `src/card_list.zig` (added feint technique with advantage override, fixed deflect id)
 - Modified: `build.zig` (added resolution.zig, weapon_list.zig test modules)
 
 ## Open Design Questions
 
-1. Should footwork techniques be "overlays" that combine with arm techniques?
-2. How does commitment get chosen — per-card or per-tick?
-3. Reaction timing — can you react to reactions?
-4. Stance as continuous value vs discrete states?
-5. Range model — per-engagement or global positioning?
+1. Should footwork techniques be "overlays" that combine with arm techniques? A- yes, this is what cards.Exclusivity is for
+2. How does commitment get chosen — per-card or per-tick? - A: let's call it "per-move": per-card, but applies across all overlays. If overlays have different durations, choose once to apply for the longest-running card and everything else in parallel with it.
+3. Reaction timing — can you react to reactions? - A: intent is yes, with the right meta-progression card(s) (not yet defined).
+4. Stance as continuous value vs discrete states? - A: not sure, might need to unpack. 
+5. Range model — per-engagement or global positioning? A: per-engagement
 
 See `doc/combat_design.md` section "Open Questions" for more.
