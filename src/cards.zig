@@ -144,6 +144,7 @@ pub const TechniqueID = enum {
     deflect,
     parry,
     block,
+    riposte,
 };
 
 /// Which weapon profile an attack uses
@@ -233,6 +234,31 @@ pub const Template = struct {
     tags: TagSet,
     rules: []const Rule,
     cost: Cost,
+
+    /// Extract combat technique from rules (first combat_technique effect found)
+    pub fn getTechnique(self: *const Template) ?*const Technique {
+        const result = self.getTechniqueWithExpression();
+        return if (result) |r| r.technique else null;
+    }
+
+    /// Extract combat technique and its containing expression
+    pub fn getTechniqueWithExpression(self: *const Template) ?struct {
+        technique: *const Technique,
+        expression: *const Expression,
+    } {
+        for (self.rules) |rule| {
+            for (rule.expressions) |*expr| {
+                switch (expr.effect) {
+                    .combat_technique => |*tech| return .{
+                        .technique = tech,
+                        .expression = expr,
+                    },
+                    else => {},
+                }
+            }
+        }
+        return null;
+    }
 };
 
 pub const Instance = struct {

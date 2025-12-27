@@ -11,6 +11,32 @@ const Features = weapon.Features;
 const Reach = combat.Reach;
 
 // ============================================================================
+// Weapon Repository
+// ============================================================================
+
+pub const WeaponEntries = [_]*const Template{
+    &horsemans_mace,
+    &footmans_axe,
+    &greataxe,
+    &knights_sword,
+    &falchion,
+    &dirk,
+    &spear,
+    &buckler,
+};
+
+pub fn byName(comptime name: []const u8) *const Template {
+    inline for (WeaponEntries) |entry| {
+        if (comptime std.mem.eql(u8, entry.name, name)) {
+            return entry;
+        }
+    }
+    @compileError("unknown weapon: " ++ name);
+}
+
+const std = @import("std");
+
+// ============================================================================
 // Horseman's Mace
 // ============================================================================
 // Cavalry mace - one-handed, balanced for mounted use, armor-crushing.
@@ -547,32 +573,6 @@ pub const buckler = Template{
     .ranged = null,
     .integrity = 120.0, // metal boss, wooden body
 };
-
-// ============================================================================
-// Weapon Repository
-// ============================================================================
-
-pub const WeaponEntries = [_]*const Template{
-    &horsemans_mace,
-    &footmans_axe,
-    &greataxe,
-    &knights_sword,
-    &falchion,
-    &dirk,
-    &spear,
-    &buckler,
-};
-
-pub fn byName(comptime name: []const u8) *const Template {
-    inline for (WeaponEntries) |entry| {
-        if (comptime std.mem.eql(u8, entry.name, name)) {
-            return entry;
-        }
-    }
-    @compileError("unknown weapon: " ++ name);
-}
-
-const std = @import("std");
 
 // ============================================================================
 // Tests

@@ -6,6 +6,7 @@ const cards = @import("cards.zig");
 const combat = @import("combat.zig");
 const damage = @import("damage.zig");
 const stats = @import("stats.zig");
+const weapon = @import("weapon.zig");
 
 const Rule = cards.Rule;
 const TagSet = cards.TagSet;
@@ -18,6 +19,15 @@ const Technique = cards.Technique;
 const TechniqueID = cards.TechniqueID;
 
 const ID = cards.ID;
+
+pub fn byName(comptime name: []const u8) *const Template {
+    inline for (&BeginnerDeck) |*template| {
+        if (comptime std.mem.eql(u8, template.name, name)) {
+            return template;
+        }
+    }
+    @compileError("unknown card: " ++ name);
+}
 
 fn hashName(comptime name: []const u8) ID {
     return std.hash.Wyhash.hash(0, name);
@@ -163,6 +173,32 @@ pub const TechniqueEntries = [_]Technique{
         .counter_mult = 1.0,
         .parry_mult = 1.0,
     },
+
+    // Riposte: quick counter-thrust after gaining control advantage
+    .{
+        .id = .riposte,
+        .name = "riposte",
+        .attack_mode = .thrust,
+        .target_height = .mid,
+        .damage = .{
+            .instances = &.{
+                .{ .amount = 1.2, .types = &.{.pierce} }, // slightly more than thrust
+            },
+            .scaling = .{
+                .ratio = 0.6,
+                .stats = .{ .average = .{ .speed, .power } },
+            },
+        },
+        .difficulty = 0.5, // easier when you have control
+        .deflect_mult = 0.8, // hard to deflect a well-timed riposte
+        .dodge_mult = 0.6, // hard to dodge
+        .counter_mult = 1.5, // risky to counter a counter
+        .parry_mult = 0.9,
+        .advantage = .{
+            .on_hit = .{ .pressure = 0.15, .control = 0.10 },
+            .on_miss = .{ .control = -0.20, .self_balance = -0.10 }, // overextend on miss
+        },
+    },
 };
 
 // -----------------------------------------------------------------------------
@@ -176,6 +212,7 @@ const templates = [_]Template{
     t_thrust,
     t_slash,
     t_shield_block,
+    t_riposte,
 };
 
 pub const BeginnerDeck = blk: {
@@ -253,13 +290,41 @@ const t_shield_block = Template{
     .rules = &.{
         .{
             .trigger = .on_play,
-            .valid = .always,
+            .valid = .{ .weapon_category = .shield },
             .expressions = &.{.{
                 .effect = .{
                     .combat_technique = Technique.byID(.block),
                 },
                 .filter = null,
                 .target = .self,
+            }},
+        },
+    },
+};
+
+const t_riposte = Template{
+    .id = 0,
+    .kind = .action,
+    .name = "riposte",
+    .description = "seize the opening",
+    .rarity = .uncommon,
+    .cost = .{ .stamina = 3.0, .time = 0.25 }, // fast, but costs stamina
+    .tags = .{ .melee = true, .offensive = true },
+    .rules = &.{
+        .{
+            .trigger = .on_play,
+            .valid = .always, // can always be played (filter does the work)
+            .expressions = &.{.{
+                .effect = .{
+                    .combat_technique = Technique.byID(.riposte),
+                },
+                // Only hits targets where you have control >= 0.6
+                .filter = .{ .advantage_threshold = .{
+                    .axis = .control,
+                    .op = .gte,
+                    .value = 0.6,
+                } },
+                .target = .all_enemies,
             }},
         },
     },

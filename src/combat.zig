@@ -44,6 +44,29 @@ pub const Armament = union(enum) {
         secondary: weapon.Instance,
     },
     compound: [][]weapon.Instance,
+
+    pub fn hasCategory(self: Armament, cat: weapon.Category) bool {
+        return switch (self) {
+            .single => |w| hasWeaponCategory(w.template, cat),
+            .dual => |d| hasWeaponCategory(d.primary.template, cat) or
+                hasWeaponCategory(d.secondary.template, cat),
+            .compound => |sets| {
+                for (sets) |set| {
+                    for (set) |w| {
+                        if (hasWeaponCategory(w.template, cat)) return true;
+                    }
+                }
+                return false;
+            },
+        };
+    }
+
+    fn hasWeaponCategory(template: *const weapon.Template, cat: weapon.Category) bool {
+        for (template.categories) |c| {
+            if (c == cat) return true;
+        }
+        return false;
+    }
 };
 
 pub const Strat = union(enum) {
@@ -449,4 +472,36 @@ test "TechniquePool.selectNext skips unaffordable, picks affordable" {
     const selected = pool.selectNext(3.0);
     try testing.expect(selected != null);
     try testing.expectEqual(@as(cards.ID, 2), selected.?.template.id);
+}
+
+fn testId(index: u32) entity.ID {
+    return .{ .index = index, .generation = 0 };
+}
+
+test "Armament.hasCategory single weapon" {
+    const weapon_list = @import("weapon_list.zig");
+    const buckler_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.buckler };
+    const sword_instance = weapon.Instance{ .id = testId(1), .template = &weapon_list.knights_sword };
+
+    const shield_armament = Armament{ .single = buckler_instance };
+    try testing.expect(shield_armament.hasCategory(.shield));
+    try testing.expect(!shield_armament.hasCategory(.sword));
+
+    const sword_armament = Armament{ .single = sword_instance };
+    try testing.expect(!sword_armament.hasCategory(.shield));
+    try testing.expect(sword_armament.hasCategory(.sword));
+}
+
+test "Armament.hasCategory dual wield" {
+    const weapon_list = @import("weapon_list.zig");
+    const buckler_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.buckler };
+    const sword_instance = weapon.Instance{ .id = testId(1), .template = &weapon_list.knights_sword };
+
+    const sword_and_shield = Armament{ .dual = .{
+        .primary = sword_instance,
+        .secondary = buckler_instance,
+    } };
+    try testing.expect(sword_and_shield.hasCategory(.shield));
+    try testing.expect(sword_and_shield.hasCategory(.sword));
+    try testing.expect(!sword_and_shield.hasCategory(.axe));
 }

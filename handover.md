@@ -111,7 +111,7 @@ These feed into `calculateHitChance`.
 ### Working
 - `resolution.zig` created and compiling
 - `tick.zig` created with full resolution loop
-- All 64 tests passing (body + resolution + weapon_list + tick + armour + damage)
+- All 68 tests passing (body + resolution + weapon_list + tick + armour + damage + combat)
 - Armor resolution complete with events
 - Body/wound system complete with events
 - Card playing and event system working
@@ -121,10 +121,12 @@ These feed into `calculateHitChance`.
 - Weapon templates: 8 melee weapons in `weapon_list.zig` with realistic stats
 - Technique-specific advantage profiles (Step 3 complete)
 - Hit location weighting with height targeting (Step 4 complete)
+- Mob multi-action commitment with stamina enforcement (Step 6 partial)
 
 ### Stubbed/TODO
 - Not wired into game loop
 - Compositional stance system (see `doc/stance_design.md`) — deferred, MVP uses static exposure tables
+- **Predicate evaluation:** `rule.valid` checked via `apply.canUseCard()`, `expr.filter` checked via `apply.expressionAppliesToTarget()`. Supports: `.always`, `.has_tag`, `.weapon_category`, `.range`, `.advantage_threshold`, `.not`, `.all`, `.any`. Remaining: `.weapon_reach` (needs weapon reach accessor on Armament).
 
 ## Implementation Plan
 
@@ -295,13 +297,21 @@ pub const TickResolver = struct {
 3. Defender's active defense found by time window overlap
 4. `resolution.resolveTechniqueVsDefense()` called for each pair
 
-### Step 6: Defense Technique Selection
+### Step 6: Defense Technique Selection ✓ PARTIAL
 
-Currently `DefenseContext.technique` is null (passive defense). Need:
+**Implemented:**
+- `commitSingleMob` now loops to fill tick with multiple techniques (round-robin)
+- Pool-based mobs commit both offensive AND defensive actions per tick
+- Actions sequenced by time windows (`[0, 0.3], [0.3, 0.6], ...`)
+- `findDefensiveAction` finds defender's active technique when time windows overlap
+- Added `technique: ?*const Technique` field to `cards.Template` (was missing, caused latent bug)
+- Stamina + time budget enforced during commitment
 
-1. Mob AI to select defensive technique based on behavior pattern
-2. Player reaction system (if they have reaction cards)
-3. Default passive defense if no active defense
+**Deferred:**
+- Exclusivity/slot conflicts (currently can block+attack in same time slot — should be prevented by hand slot)
+- Behavior-based selection (aggressive vs defensive patterns, weighted selection)
+- Player reaction system (reaction cards during resolution)
+- Mob AI situational awareness (e.g., defend when low on advantage)
 
 ### Step 7: Threshold Effects
 
@@ -377,6 +387,23 @@ zig build test --summary all
 - Modified: `build.zig` - Fixed test duplication (was running tests 2-3x due to transitive imports); single entry point via main.zig
 - Modified: `src/main.zig` - Added test block to force discovery of all test modules
 
+### Stamina enforcement + Step 6 mob defense
+- Modified: `src/combat.zig` - TechniquePool.selectNext() now takes `available_stamina` param, filters unaffordable; added 2 tests
+- Modified: `src/tick.zig` - commitSingleMob loops to fill tick with multiple techniques; reserves stamina; uses `template.getTechnique()`; added 2 tests
+- Modified: `src/cards.zig` - Added `Template.getTechnique()` method to extract technique from rules chain
+
+### Predicate evaluation (rule.valid)
+- Modified: `src/combat.zig` - Added `Armament.hasCategory()` helper; 2 tests for single/dual wield
+- Modified: `src/apply.zig` - Added `canUseCard()` + `evaluateValidityPredicate()` for rule.valid checking; `CommandHandler` now uses it; added `PredicateFailed` error; 4 tests
+- Modified: `src/tick.zig` - `commitSingleMob()` now calls `apply.canUseCard()` for mob techniques
+- Modified: `src/card_list.zig` - Added `byName()` lookup; `t_shield_block` now uses `.weapon_category = .shield` predicate
+
+### Predicate evaluation (expr.filter)
+- Modified: `src/apply.zig` - Added `PredicateContext`, `evaluatePredicate()` with engagement context, `expressionAppliesToTarget()`, `cardHasValidTargets()` (UX helper), `compareReach()`, `compareF32()`; implemented `.range`, `.advantage_threshold` predicates; 5 new tests
+- Modified: `src/cards.zig` - Added `TechniqueID.riposte`; `Template.getTechniqueWithExpression()` returns both technique and expression
+- Modified: `src/tick.zig` - `CommittedAction` now stores `expression` field; resolution loop uses `action.expression` for filter evaluation and target query; removed `getTargetQuery()` and `getExpression()` helpers
+- Modified: `src/card_list.zig` - Added riposte technique and `t_riposte` card with `.advantage_threshold = .{ .axis = .control, .op = .gte, .value = 0.6 }` filter
+
 ## Known Limitations & Shortcuts
 
 Items to revisit when extending the system:
@@ -392,15 +419,11 @@ Items to revisit when extending the system:
 ### Mob AI
 - **Round-robin only:** `TechniquePool.selectNext()` cycles through techniques. No state-based selection, weighted options, or situational awareness.
 - **Fixed cooldown:** Pool-based mobs get 2-tick cooldown (defined in `apply.zig:DEFAULT_COOLDOWN_TICKS`).
-- **No defensive selection:** Mobs don't actively choose to defend; they only attack. Step 6 addresses this.
+- **No exclusivity checking:** Mobs can commit block+attack in same time slot; should check hand slot conflicts.
 
 ### Targeting
 - **1v1 assumption:** Many places assume player vs single mob engagement. Multi-mob targeting works but engagement lookup may need refinement.
 - **Partial TargetQuery:** `apply.evaluateTargets()` handles `.all_enemies`, `.self`, `.single` but stubs out `.body_part` and `.event_source`.
-
-### Stamina & Resources
-- **No stamina=0 blocking:** Design doc says stamina exhaustion should block commitment, but this isn't enforced.
-- **Stamina can go negative:** `applyCommittedCosts()` clamps to 0 but doesn't prevent over-spending.
 
 ### Resolution
 - **No reactions during resolution:** The FSM has `player_reaction` state but reactions aren't integrated into `TickResolver.resolve()`.

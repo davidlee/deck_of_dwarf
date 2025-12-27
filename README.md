@@ -1,10 +1,12 @@
-# a game
+# DECK OF DWARF: a card game about killing Gobbo scum
 
 This is an experimental deck-building dungeon battler written in Zig (0.15.2) with SDL3 bindings.
 
 The game is about simultaneous disclosure, information asymmetry, and ludicrous simulated detail.
 
 There are no health bars; only bone, tissue penetration, and vital organ trauma.
+
+Happily, Dwarves regenerate in the presence of alcohol (although the process isn't kind to the alcohol).
 
 Success in combat is about anticipating your opponent, carefully conserving stamina, probing and exploiting to gain an advantage, and pressing it at the right time (without over-extending) to land a decisive hit.
 
