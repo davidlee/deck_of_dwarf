@@ -66,6 +66,7 @@ pub fn runTestCase(world: *World) !void {
     log("ready: {}\n", .{world.encounter.?.enemies.items[0]});
 
     // draw some cards - only player has a "real" deck
+    // we should prolly move this into an event listener in apply which runs whenever we ender the .draw_cards state ..
     for(0..8) |_| {
         try world.player.cards.deck.move(world.player.cards.deck.draw.items[0].id, .draw , .hand);
     }
@@ -73,6 +74,10 @@ pub fn runTestCase(world: *World) !void {
     try world.commandHandler.gameStateTransition(.player_card_selection);
     try nextFrame(world);
 
+    mob.body = mob.body; // shh no const warning
+    
+    // this mob just has a pool, not a real deck ...
+    // 
     // try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
     // try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
     // try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
@@ -98,12 +103,19 @@ pub fn runTestCase(world: *World) !void {
     try world.commandHandler.playActionCard(card);
     log("player stamina: {d}/{d}\n", .{ world.player.stamina, world.player.stamina_available });
 
-    try nextFrame(world);
+    // try nextFrame(world);
 
-    try world.commandHandler.gameStateTransition(.player_reaction);
+    try world.commandHandler.gameStateTransition(.tick_resolution);
+    
+    const result = try world.processTick();
+    
+    log("tick resolved: {any}\n", .{result});
+    
+    try nextFrame(world); // process resolution events
+    
     for (world.player.cards.deck.in_play.items) |inst| log("player card: {s}\n", .{inst.template.name});
 
-    try nextFrame(world);
+    // try nextFrame(world);
 
     std.process.exit(0);
 }

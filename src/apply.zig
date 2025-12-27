@@ -506,8 +506,8 @@ pub fn evaluateTargets(
         },
         .single => |selector| {
             // Look up by entity ID
-            if (w.agents.get(selector.id)) |agent| {
-                try targets.append(alloc, agent);
+            if (w.entities.agents.get(selector.id)) |agent| {
+                try targets.append(alloc, agent.*);
             }
         },
         .body_part, .event_source => {

@@ -147,7 +147,7 @@ pub const TechniquePool = struct {
 
     /// Apply cooldown to a technique (by template ID)
     pub fn applyCooldown(self: *TechniquePool, template_id: cards.ID, ticks: u8) !void {
-        try self.cooldowns.put(self.alloc, template_id, ticks);
+        try self.cooldowns.put(template_id, ticks);
     }
 
     /// Decrement all cooldowns by 1

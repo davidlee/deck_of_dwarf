@@ -7,6 +7,7 @@ const world = @import("world.zig");
 const body = @import("body.zig");
 const apply = @import("apply.zig");
 const weapon_list = @import("weapon_list.zig");
+const weapon= @import("weapon.zig");
 
 const Agent = combat.Agent;
 const Engagement = combat.Engagement;
@@ -317,7 +318,7 @@ pub const TickResolver = struct {
         }
     }
 
-    fn getWeaponTemplate(self: *TickResolver, agent: *Agent) *const weapon_list.weapon.Template {
+    fn getWeaponTemplate(self: *TickResolver, agent: *Agent) *const weapon.Template {
         _ = self;
         _ = agent;
         // TODO: get from agent's equipped weapon

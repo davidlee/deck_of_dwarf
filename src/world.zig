@@ -11,7 +11,7 @@ const stats = @import("stats.zig");
 const combat = @import("combat.zig");
 const body = @import("body.zig");
 const tick = @import("tick.zig");
-const weapon= @import("weapon.zig");
+const weapon = @import("weapon.zig");
 
 const EventSystem = events.EventSystem;
 const CommandHandler = apply.CommandHandler;
@@ -41,7 +41,7 @@ pub const EntityMap = struct {
         for (self.agents.items.items) |x| x.deinit();
         self.agents.deinit();
         alloc.destroy(self.agents);
-        
+
         for (self.weapons.items.items) |x| alloc.destroy(x);
         self.weapons.deinit();
         alloc.destroy(self.weapons);
@@ -107,23 +107,20 @@ pub const World = struct {
         const playerBody = try body.Body.fromPlan(alloc, &body.HumanoidPlan);
 
         const self = try alloc.create(World);
-        const entities = try alloc.create(EntityMap);
-        entities.*= try EntityMap.init(alloc);
 
         self.* = .{
             .alloc = alloc,
             .events = try EventSystem.init(alloc),
             .encounter = try combat.Encounter.init(alloc),
             .random = random.RandomStreamDict.init(),
-            // .agents = agents,
             .entities = try EntityMap.init(alloc),
-            .player = try player.newPlayer(alloc, self, playerDeck, playerStats, playerBody),
+            .player = undefined, // set after entities exist
             .fsm = fsm,
             .tickResolver = try TickResolver.init(alloc),
-            // .deck = try Deck.init(alloc, &BeginnerDeck),
             .eventProcessor = undefined,
             .commandHandler = undefined,
         };
+        self.player = try player.newPlayer(alloc, self, playerDeck, playerStats, playerBody);
         return self;
     }
 
@@ -165,7 +162,7 @@ pub const World = struct {
         const result = try self.tickResolver.resolve(self);
 
         // Cleanup: apply costs, move cards
-        try self.tickResolver.cleanup();
+        try apply.applyCommittedCosts(self.tickResolver.committed.items, &self.events);
 
         // Emit tick ended event
         try self.events.push(.{ .tick_ended = {} });
