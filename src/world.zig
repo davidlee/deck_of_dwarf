@@ -11,6 +11,7 @@ const stats = @import("stats.zig");
 const combat = @import("combat.zig");
 const body = @import("body.zig");
 const tick = @import("tick.zig");
+const weapon= @import("weapon.zig");
 
 const EventSystem = events.EventSystem;
 const CommandHandler = apply.CommandHandler;
@@ -21,19 +22,51 @@ const Deck = @import("deck.zig").Deck;
 const BeginnerDeck = card_list.BeginnerDeck;
 const TickResolver = tick.TickResolver;
 
+pub const EntityMap = struct {
+    agents: *SlotMap(*combat.Agent),
+    weapons: *SlotMap(*weapon.Instance),
+    // ... etc
+
+    pub fn init(alloc: std.mem.Allocator) !EntityMap {
+        const agents = try alloc.create(SlotMap(*combat.Agent));
+        agents.* = try SlotMap(*combat.Agent).init(alloc);
+
+        const weapons = try alloc.create(SlotMap(*weapon.Instance));
+        weapons.* = try SlotMap(*weapon.Instance).init(alloc);
+
+        return .{ .agents = agents, .weapons = weapons };
+    }
+
+    pub fn deinit(self: *EntityMap, alloc: std.mem.Allocator) void {
+        for (self.agents.items.items) |x| x.deinit();
+        self.agents.deinit();
+        alloc.destroy(self.agents);
+        
+        for (self.weapons.items.items) |x| alloc.destroy(x);
+        self.weapons.deinit();
+        alloc.destroy(self.weapons);
+    }
+};
+
 pub const GameEvent = enum {
-    start_game,
-    end_player_card_selection,
-    end_tick_resolution,
-    end_player_reaction,
-    end_animation,
+    start_encounter,
+    begin_player_card_selection,
+    begin_tick_resolution,
+    player_reaction_opportunity,
+    continue_tick_resolution,
+    animate_resolution,
+    redraw,
+    show_loot,
+    player_died,
 };
 
 pub const GameState = enum {
     menu,
+    draw_hand,
     player_card_selection,
     tick_resolution, // NEW: resolve committed actions
     player_reaction,
+    encounter_summary,
     animating,
 };
 
@@ -42,40 +75,49 @@ pub const World = struct {
     events: EventSystem,
     encounter: ?combat.Encounter,
     random: random.RandomStreamDict,
-    agents: *SlotMap(*combat.Agent),
+    entities: EntityMap,
+    // agents: *SlotMap(*combat.Agent),
     player: *combat.Agent,
-    fsm: zigfsm.StateMachine(GameState, GameEvent, .player_card_selection),
+    fsm: zigfsm.StateMachine(GameState, GameEvent, .draw_hand),
     tickResolver: TickResolver,
     // deck: Deck,
     commandHandler: CommandHandler,
     eventProcessor: EventProcessor,
 
     pub fn init(alloc: std.mem.Allocator) !*World {
-        const FSM = zigfsm.StateMachine(GameState, GameEvent, .player_card_selection);
+        const FSM = zigfsm.StateMachine(GameState, GameEvent, .draw_hand);
 
         var fsm = FSM.init();
 
-        try fsm.addEventAndTransition(.start_game, .menu, .player_card_selection);
-        try fsm.addEventAndTransition(.end_player_card_selection, .player_card_selection, .tick_resolution);
-        try fsm.addEventAndTransition(.end_tick_resolution, .tick_resolution, .player_reaction);
-        try fsm.addEventAndTransition(.end_player_reaction, .player_reaction, .animating);
-        try fsm.addEventAndTransition(.end_animation, .animating, .player_card_selection);
+        try fsm.addEventAndTransition(.start_encounter, .menu, .draw_hand);
+
+        try fsm.addEventAndTransition(.begin_player_card_selection, .draw_hand, .player_card_selection);
+        try fsm.addEventAndTransition(.begin_tick_resolution, .player_card_selection, .tick_resolution);
+        try fsm.addEventAndTransition(.player_reaction_opportunity, .tick_resolution, .player_reaction);
+        try fsm.addEventAndTransition(.continue_tick_resolution, .player_reaction, .tick_resolution);
+        try fsm.addEventAndTransition(.animate_resolution, .tick_resolution, .animating);
+        try fsm.addEventAndTransition(.continue_tick_resolution, .animating, .tick_resolution);
+
+        try fsm.addEventAndTransition(.player_died, .animating, .menu);
+        try fsm.addEventAndTransition(.show_loot, .animating, .encounter_summary);
+        try fsm.addEventAndTransition(.redraw, .animating, .draw_hand);
 
         const playerDeck = try Deck.init(alloc, &BeginnerDeck);
         const playerStats = stats.Block.splat(5);
         const playerBody = try body.Body.fromPlan(alloc, &body.HumanoidPlan);
 
         const self = try alloc.create(World);
-        const agents = try alloc.create(SlotMap(*combat.Agent));
-        agents.* = try SlotMap(*combat.Agent).init(alloc);
+        const entities = try alloc.create(EntityMap);
+        entities.*= try EntityMap.init(alloc);
 
         self.* = .{
             .alloc = alloc,
             .events = try EventSystem.init(alloc),
             .encounter = try combat.Encounter.init(alloc),
             .random = random.RandomStreamDict.init(),
-            .agents = agents,
-            .player = try player.newPlayer(alloc, agents, playerDeck, playerStats, playerBody),
+            // .agents = agents,
+            .entities = try EntityMap.init(alloc),
+            .player = try player.newPlayer(alloc, self, playerDeck, playerStats, playerBody),
             .fsm = fsm,
             .tickResolver = try TickResolver.init(alloc),
             // .deck = try Deck.init(alloc, &BeginnerDeck),
@@ -96,10 +138,7 @@ pub const World = struct {
         if (self.encounter) |*encounter| {
             encounter.deinit(self.alloc);
         }
-        // Player is in agents, so no separate deinit needed
-        for (self.agents.items.items) |x| x.deinit();
-        self.agents.deinit();
-        self.alloc.destroy(self.agents);
+        self.entities.deinit(self.alloc);
         self.alloc.destroy(self);
     }
 

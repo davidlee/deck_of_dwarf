@@ -660,6 +660,7 @@ fn makeTestAgent(
     const agent_stats = stats.Block.splat(5);
     const agent_body = try body.Body.fromPlan(alloc, &body.HumanoidPlan);
 
+    
     const agent = try Agent.init(
         alloc,
         agents,
@@ -668,6 +669,7 @@ fn makeTestAgent(
         agent_stats,
         agent_body,
         10.0,
+        undefined, // armament is annoying to make
     );
 
     return agent;
@@ -682,7 +684,7 @@ test "resolveTechniqueVsDefense emits technique_resolved event" {
 
     // Create attacker (player) and defender (mob)
     const attacker = w.player;
-    const defender = try makeTestAgent(alloc, w.agents, .ai);
+    const defender = try makeTestAgent(alloc, w.entities.agents, .ai);
     // Note: defender is cleaned up by w.deinit() since it's in w.agents
 
     // Set up engagement on defender
@@ -743,7 +745,7 @@ test "resolveTechniqueVsDefense emits advantage_changed events on hit" {
     w.attachEventHandlers();
 
     const attacker = w.player;
-    const defender = try makeTestAgent(alloc, w.agents, .ai);
+    const defender = try makeTestAgent(alloc, w.entities.agents, .ai);
     // Note: defender is cleaned up by w.deinit() since it's in w.agents
 
     defender.engagement = Engagement{};
@@ -811,7 +813,7 @@ test "resolveTechniqueVsDefense applies damage on hit" {
     w.attachEventHandlers();
 
     const attacker = w.player;
-    const defender = try makeTestAgent(alloc, w.agents, .ai);
+    const defender = try makeTestAgent(alloc, w.entities.agents, .ai);
     // Note: defender is cleaned up by w.deinit() since it's in w.agents
 
     defender.engagement = Engagement{};

@@ -90,8 +90,6 @@ pub const Deck = struct {
             .techniques = std.StringHashMap(*const cards.Technique).init(alloc),
         };
 
-        var i: usize = 0;
-
         for (templates) |*t| {
             for (t.rules) |rule| {
                 for (rule.expressions) |expr| {
@@ -106,18 +104,12 @@ pub const Deck = struct {
                 }
             }
 
-            // TODO: add weighting & randomisation for building initial deck
-            for (0..5) |_| {
+            for(0..5) |_| {
                 const instance = try self.createInstance(t);
-                // try self.deck.append(alloc, instance);
-                if (i < 5) {
-                    try self.hand.append(alloc, instance);
-                    // std.debug.print("->hand: {s}\n", .{instance.template.name});
-                } else {
-                    try self.draw.append(alloc, instance);
-                }
-                i += 1;
+                try self.draw.append(alloc, instance);
             }
+            
+            // TODO shuffle, etc
         }
         return self;
     }

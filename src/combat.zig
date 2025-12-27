@@ -40,12 +40,12 @@ pub const AdvantageAxis = enum {
 };
 
 pub const Armament = union(enum) {
-    single: weapon.Instance,
+    single: *weapon.Instance,
     dual: struct {
-        primary: weapon.Instance,
-        secondary: weapon.Instance,
+        primary: *weapon.Instance,
+        secondary: *weapon.Instance,
     },
-    compound: [][]weapon.Instance,
+    compound: [][]*weapon.Instance,
 
     pub fn hasCategory(self: Armament, cat: weapon.Category) bool {
         return switch (self) {
@@ -227,6 +227,7 @@ pub const Agent = struct {
         sb: stats.Block,
         bd: body.Body,
         stamina: f32,
+        armament: Armament,
     ) !*Agent {
         // const agent = initEmpty(alloc, slot_map);
         const agent = try alloc.create(combat.Agent);
@@ -239,7 +240,7 @@ pub const Agent = struct {
             // .state = State.init(alloc, stamina),
             .body = bd,
             .armour = armour.Stack.init(alloc),
-            .weapons = undefined,
+            .weapons = armament,
             .engagement = (if (dr == .ai) Engagement{} else null),
             .stamina = stamina,
             .stamina_available = stamina,
@@ -257,7 +258,6 @@ pub const Agent = struct {
 
     pub fn deinit(self: *Agent) void {
         const alloc = self.alloc;
-        // slot_map.remove(self.id);
 
         switch (self.cards) {
             .deck => |*dk| dk.deinit(),
@@ -540,26 +540,26 @@ fn testId(index: u32) entity.ID {
 
 test "Armament.hasCategory single weapon" {
     const weapon_list = @import("weapon_list.zig");
-    const buckler_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.buckler };
-    const sword_instance = weapon.Instance{ .id = testId(1), .template = &weapon_list.knights_sword };
+    var buckler_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.buckler };
+    var sword_instance = weapon.Instance{ .id = testId(1), .template = &weapon_list.knights_sword };
 
-    const shield_armament = Armament{ .single = buckler_instance };
+    const shield_armament = Armament{ .single = &buckler_instance };
     try testing.expect(shield_armament.hasCategory(.shield));
     try testing.expect(!shield_armament.hasCategory(.sword));
 
-    const sword_armament = Armament{ .single = sword_instance };
+    const sword_armament = Armament{ .single = &sword_instance };
     try testing.expect(!sword_armament.hasCategory(.shield));
     try testing.expect(sword_armament.hasCategory(.sword));
 }
 
 test "Armament.hasCategory dual wield" {
     const weapon_list = @import("weapon_list.zig");
-    const buckler_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.buckler };
-    const sword_instance = weapon.Instance{ .id = testId(1), .template = &weapon_list.knights_sword };
+    var buckler_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.buckler };
+    var sword_instance = weapon.Instance{ .id = testId(1), .template = &weapon_list.knights_sword };
 
     const sword_and_shield = Armament{ .dual = .{
-        .primary = sword_instance,
-        .secondary = buckler_instance,
+        .primary = &sword_instance,
+        .secondary = &buckler_instance,
     } };
     try testing.expect(sword_and_shield.hasCategory(.shield));
     try testing.expect(sword_and_shield.hasCategory(.sword));

@@ -634,35 +634,35 @@ fn makeTestAgent(armament: combat.Armament) Agent {
 
 test "canUseCard allows card with always predicate" {
     const thrust_template = card_list.byName("thrust");
-    const sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
-    const agent = makeTestAgent(.{ .single = sword_instance });
+    var sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
+    const agent = makeTestAgent(.{ .single = &sword_instance });
 
     try testing.expect(canUseCard(thrust_template, &agent));
 }
 
 test "canUseCard allows shield block with shield equipped" {
     const shield_block = card_list.byName("shield block");
-    const buckler_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.buckler };
-    const agent = makeTestAgent(.{ .single = buckler_instance });
+    var buckler_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.buckler };
+    const agent = makeTestAgent(.{ .single =  &buckler_instance });
 
     try testing.expect(canUseCard(shield_block, &agent));
 }
 
 test "canUseCard denies shield block without shield" {
     const shield_block = card_list.byName("shield block");
-    const sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
-    const agent = makeTestAgent(.{ .single = sword_instance });
+    var sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
+    const agent = makeTestAgent(.{ .single = &sword_instance });
 
     try testing.expect(!canUseCard(shield_block, &agent));
 }
 
 test "canUseCard allows shield block with sword and shield dual wield" {
     const shield_block = card_list.byName("shield block");
-    const sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
-    const buckler_instance = weapon.Instance{ .id = testId(1), .template = &weapon_list.buckler };
+    var sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
+    var buckler_instance = weapon.Instance{ .id = testId(1), .template = &weapon_list.buckler };
     const agent = makeTestAgent(.{ .dual = .{
-        .primary = sword_instance,
-        .secondary = buckler_instance,
+        .primary = &sword_instance,
+        .secondary = &buckler_instance,
     } });
 
     try testing.expect(canUseCard(shield_block, &agent));
@@ -682,9 +682,9 @@ fn makeTestCardInstance(template: *const cards.Template) cards.Instance {
 test "expressionAppliesToTarget returns true when no filter" {
     const thrust = card_list.byName("thrust");
     const expr = &thrust.rules[0].expressions[0];
-    const sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
-    const actor = makeTestAgent(.{ .single = sword_instance });
-    const target = makeTestAgent(.{ .single = sword_instance });
+    var sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
+    const actor = makeTestAgent(.{ .single = &sword_instance });
+    const target = makeTestAgent(.{ .single = &sword_instance });
     const card = makeTestCardInstance(thrust);
 
     try testing.expect(expressionAppliesToTarget(expr, &card, &actor, &target, null));
@@ -693,9 +693,9 @@ test "expressionAppliesToTarget returns true when no filter" {
 test "expressionAppliesToTarget with advantage_threshold filter passes when control high" {
     const riposte = card_list.byName("riposte");
     const expr = &riposte.rules[0].expressions[0];
-    const sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
-    const actor = makeTestAgent(.{ .single = sword_instance });
-    const target = makeTestAgent(.{ .single = sword_instance });
+    var sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
+    const actor = makeTestAgent(.{ .single =  &sword_instance });
+    const target = makeTestAgent(.{ .single = &sword_instance });
     const card = makeTestCardInstance(riposte);
 
     // High control engagement (0.7 >= 0.6 threshold)
@@ -707,9 +707,9 @@ test "expressionAppliesToTarget with advantage_threshold filter passes when cont
 test "expressionAppliesToTarget with advantage_threshold filter fails when control low" {
     const riposte = card_list.byName("riposte");
     const expr = &riposte.rules[0].expressions[0];
-    const sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
-    const actor = makeTestAgent(.{ .single = sword_instance });
-    const target = makeTestAgent(.{ .single = sword_instance });
+    var sword_instance = weapon.Instance{ .id = testId(0), .template = &weapon_list.knights_sword };
+    const actor = makeTestAgent(.{ .single =  &sword_instance });
+    const target = makeTestAgent(.{ .single = &sword_instance });
     const card = makeTestCardInstance(riposte);
 
     // Low control engagement (0.4 < 0.6 threshold)

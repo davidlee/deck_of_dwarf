@@ -10,6 +10,8 @@ const body = @import("body.zig");
 const card_list = @import("card_list.zig");
 const stats = @import("stats.zig");
 const entity = @import("entity.zig");
+const weapon = @import("weapon.zig");
+const weapon_list = @import("weapon_list.zig");
 
 const EventSystem = events.EventSystem;
 const CommandHandler = apply.CommandHandler;
@@ -40,25 +42,42 @@ pub fn runTestCase(world: *World) !void {
     // log("\nEncounter: {d}\n", .{world.encounter.?.enemies.items.len});
     // log("\nEnemy: {any}\n", .{world.encounter.?.enemies.items[0]});
 
+    log("draw time: {}\n", .{world.player.weapons});
+
     const mobdeck = try Deck.init(world.alloc, &BeginnerDeck);
+    var buckler = try world.alloc.create(weapon.Instance);
+    buckler.id = try world.entities.weapons.insert(buckler);
+    buckler.template = weapon_list.byName("buckler");
 
     var mob = try combat.Agent.init(
         world.alloc,
-        world.agents,
+        world.entities.agents,
         .ai,
         combat.Strat{ .deck = mobdeck },
         stats.Block.splat(6),
         try body.Body.init(world.alloc),
         10.0,
+        combat.Armament{ .single = buckler },
     );
 
+    log("ok: {}\n", .{mob});
     try world.encounter.?.enemies.append(world.alloc, mob);
 
-    try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
-    try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
-    try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
+    log("ready: {}\n", .{world.encounter.?.enemies.items[0]});
 
+    // draw some cards - only player has a "real" deck
+    for(0..8) |_| {
+        try world.player.cards.deck.move(world.player.cards.deck.draw.items[0].id, .draw , .hand);
+    }
+    
+    try world.commandHandler.gameStateTransition(.player_card_selection);
     try nextFrame(world);
+
+    // try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
+    // try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
+    // try mob.cards.deck.move(mob.cards.deck.hand.items[0].id, .hand, .in_play);
+
+    // try nextFrame(world);
 
     // play a single action card
     //
