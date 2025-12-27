@@ -376,9 +376,10 @@ pub fn resolveTechniqueVsDefense(
             dmg_packet.?,
         );
 
-        // Apply remaining damage to body (body emits its own events for wounds/severing)
+        // Apply remaining damage to body (emits wound_inflicted, severed, etc.)
         if (armour_result.?.remaining.amount > 0) {
-            body_result = try attack.defender.body.applyDamageToPart(
+            body_result = try attack.defender.body.applyDamageWithEvents(
+                &w.events,
                 target_part,
                 armour_result.?.remaining,
             );
