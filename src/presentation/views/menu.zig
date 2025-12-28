@@ -4,12 +4,12 @@
 
 const std = @import("std");
 const view = @import("view.zig");
-const commands = @import("../../commands.zig");
+const infra = @import("infra");
 const World = @import("../../domain/world.zig").World;
 
 const Renderable = view.Renderable;
 const InputEvent = view.InputEvent;
-const Command = commands.Command;
+const Command = infra.commands.Command;
 
 pub const MenuView = struct {
     world: *const World,
@@ -33,7 +33,7 @@ pub const MenuView = struct {
 
     pub fn renderables(self: *const MenuView, alloc: std.mem.Allocator) !std.ArrayList(Renderable) {
         _ = self;
-        var list = std.ArrayList(Renderable).init(alloc);
+        const list = try std.ArrayList(Renderable).initCapacity(alloc, 8);
         // TODO: add menu renderables
         // - title sprite
         // - menu buttons

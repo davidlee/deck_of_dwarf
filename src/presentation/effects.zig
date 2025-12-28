@@ -5,9 +5,9 @@
 
 const std = @import("std");
 const events = @import("../domain/events.zig");
-const commands = @import("../commands.zig");
+const infra = @import("infra");
 const Event = events.Event;
-const ID = commands.ID;
+const ID = infra.commands.ID;
 
 // Presentation effects - what the UI should show
 pub const Effect = union(enum) {
@@ -84,11 +84,11 @@ pub const EffectSystem = struct {
     pending: std.ArrayList(Effect),
     animations: std.ArrayList(Tween),
 
-    pub fn init(alloc: std.mem.Allocator) EffectSystem {
+    pub fn init(alloc: std.mem.Allocator) !EffectSystem {
         return .{
             .alloc = alloc,
-            .pending = std.ArrayList(Effect).init(alloc),
-            .animations = std.ArrayList(Tween).init(alloc),
+            .pending = try std.ArrayList(Effect).initCapacity(alloc, 16),
+            .animations = try std.ArrayList(Tween).initCapacity(alloc, 16),
         };
     }
 
@@ -98,7 +98,7 @@ pub const EffectSystem = struct {
     }
 
     pub fn push(self: *EffectSystem, effect: Effect) !void {
-        try self.pending.append(effect);
+        try self.pending.append(self.alloc, effect);
     }
 
     // Process pending effects into animations
@@ -112,7 +112,7 @@ pub const EffectSystem = struct {
                 .advantage_changed => 0.4,
                 .screen_shake => 0.2,
             };
-            try self.animations.append(.{
+            try self.animations.append(self.alloc, .{
                 .effect = effect,
                 .start_time = current_time,
                 .duration = duration,

@@ -24,6 +24,8 @@ const View = view.View;
 const InputEvent = view.InputEvent;
 const Point = view.Point;
 const UX = graphics.UX;
+const infra = @import("infra");
+const Command = infra.commands.Command;
 
 pub const Coordinator = struct {
     alloc: std.mem.Allocator,
@@ -32,12 +34,12 @@ pub const Coordinator = struct {
     effect_system: EffectSystem,
     current_time: f32,
 
-    pub fn init(alloc: std.mem.Allocator, world: *World, ux: *UX) Coordinator {
+    pub fn init(alloc: std.mem.Allocator, world: *World, ux: *UX) !Coordinator {
         return .{
             .alloc = alloc,
             .world = world,
             .ux = ux,
-            .effect_system = EffectSystem.init(alloc),
+            .effect_system = try EffectSystem.init(alloc),
             .current_time = 0,
         };
     }
@@ -62,7 +64,7 @@ pub const Coordinator = struct {
     }
 
     // Handle SDL input event
-    pub fn handleInput(self: *Coordinator, sdl_event: s.events.Event) ?@import("../commands.zig").Command {
+    pub fn handleInput(self: *Coordinator, sdl_event: s.events.Event) ?Command {
         const input_event: InputEvent = switch (sdl_event) {
             .mouse_button_down => |data| blk: {
                 const coords = self.ux.translateCoords(.{ .x = data.x, .y = data.y });
@@ -76,8 +78,23 @@ pub const Coordinator = struct {
         return v.handleInput(input_event);
     }
 
+    // Handle SDL non-input event
+    pub fn processSystemEvent(self: *Coordinator, sdl_event: s.events.Event) void {
+        switch (sdl_event) {
+            .window_resized => {
+                self.ux.ui.screen.w = sdl_event.window_resized.width;
+                self.ux.ui.screen.h = sdl_event.window_resized.height;
+            },
+            .window_pixel_size_changed => {
+                self.ux.ui.screen.w = sdl_event.window_pixel_size_changed.width;
+                self.ux.ui.screen.h = sdl_event.window_pixel_size_changed.height;
+            },
+            else => {},
+        }
+    }
+
     // Process domain events into presentation effects
-    pub fn processEvents(self: *Coordinator) !void {
+    pub fn processWorldEvents(self: *Coordinator) !void {
         for (self.world.events.current_events.items) |event| {
             if (EffectMapper.map(event)) |effect| {
                 try self.effect_system.push(effect);

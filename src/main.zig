@@ -15,6 +15,9 @@ const weapon_list = @import("domain/weapon_list.zig");
 const tick = @import("domain/tick.zig");
 const CommandHandler = @import("domain/apply.zig").CommandHandler;
 
+// const coordinator = @import("presentation/coordinator.zig");
+const presentation = @import("presentation/mod.zig");
+
 // presentation
 const ctrl = @import("presentation/controls.zig");
 const gfx = @import("presentation/graphics.zig");
@@ -43,45 +46,38 @@ pub fn main() !void {
 
     var ux = try gfx.UX.init(alloc, &config);
 
+    var coordinator = try presentation.Coordinator.init(alloc, world, &ux);
+
     var quit = false;
+
     while (!quit) {
-        // Delay to limit the FPS, returned delta time not needed.
-        _ = ux.fps_capper.delay();
-
-        // Update logic.
-        try world.step();
-
-        try ux.render(world);
-
-        // swap event streams
-        world.events.swap_buffers();
-
         // SDL Event handlers
         while (s.events.poll()) |event|
             switch (event) {
                 .quit => quit = true,
                 .terminating => quit = true,
-                .key_down => {
-                    quit = ctrl.keypress(event.key_down.key.?, world);
-                },
-                .mouse_motion => {
-                    ux.ui.mouse = s.rect.FPoint{ .x = event.mouse_motion.x, .y = event.mouse_motion.y };
-                },
-                .mouse_wheel => {
-                    // world.ui.zoom = std.math.clamp(world.ui.zoom + event.mouse_wheel.scroll_y, 1.0, 10.0);
-                },
-                .window_resized => {
-                    ux.ui.screen.w = event.window_resized.width;
-                    ux.ui.screen.h = event.window_resized.height;
-                },
-                .window_pixel_size_changed => {
-                    ux.ui.screen.w = event.window_pixel_size_changed.width;
-                    ux.ui.screen.h = event.window_pixel_size_changed.height;
-                },
                 else => {
-                    // log("\nevent:{any}->\n", .{event});
+                    const cmd = coordinator.handleInput(event);
+                    if (cmd) |c| try world.commandHandler.handle(c);
+
+                    coordinator.processSystemEvent(event);
                 },
             };
+
+        // Update logic.
+        try world.step();
+
+        // swap event streams
+        world.events.swap_buffers();
+
+        // read this frame's events
+        try coordinator.processWorldEvents();
+
+        // Delay to limit the FPS, returned delta time used for animation timing
+        try coordinator.update(ux.fps_capper.delay());
+
+        // render
+        try coordinator.render();
     }
 }
 

@@ -5,8 +5,8 @@
 
 const std = @import("std");
 const s = @import("sdl3");
-const commands = @import("../../commands.zig");
-const Command = commands.Command;
+const infra = @import("infra");
+const Command = infra.commands.Command;
 
 const menu = @import("menu.zig");
 const combat = @import("combat.zig");

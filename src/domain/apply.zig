@@ -124,6 +124,13 @@ pub const CommandHandler = struct {
         }
     }
 
+    pub fn handle(self: *CommandHandler, cmd: lib.Command) !void {
+        _ = self;
+        switch (cmd) {
+            else => {},
+        }
+    }
+
     pub fn playActionCard(self: *CommandHandler, card: *cards.Instance) !void {
         const player = self.world.player;
         const game_state = self.world.fsm.currentState();

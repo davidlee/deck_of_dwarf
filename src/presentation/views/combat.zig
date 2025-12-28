@@ -5,7 +5,7 @@
 
 const std = @import("std");
 const view = @import("view.zig");
-const commands = @import("../../commands.zig");
+const infra = @import("infra");
 const World = @import("../../domain/world.zig").World;
 const cards = @import("../../domain/cards.zig");
 const combat = @import("../../domain/combat.zig");
@@ -13,8 +13,8 @@ const combat = @import("../../domain/combat.zig");
 const Renderable = view.Renderable;
 const InputEvent = view.InputEvent;
 const Point = view.Point;
-const Command = commands.Command;
-const ID = commands.ID;
+const Command = infra.commands.Command;
+const ID = infra.commands.ID;
 
 pub const CombatView = struct {
     world: *const World,
@@ -120,7 +120,7 @@ pub const CombatView = struct {
     // Rendering
 
     pub fn renderables(self: *const CombatView, alloc: std.mem.Allocator) !std.ArrayList(Renderable) {
-        var list = std.ArrayList(Renderable).init(alloc);
+        const list = try std.ArrayList(Renderable).initCapacity(alloc, 32);
 
         // TODO: render
         // - player hand (cards at bottom)
