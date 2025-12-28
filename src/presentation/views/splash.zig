@@ -30,19 +30,18 @@ pub const TitleScreenView = struct {
         _ = self;
         var list = try std.ArrayList(Renderable).initCapacity(alloc, 8);
 
-        // Background image
+        // Background image (null dst = native size at origin)
         try list.append(alloc, .{ .sprite = .{
             .asset = AssetId.splash_background,
-            .x = 0,
-            .y = 0,
         } });
 
         // Tagline
-        try list.append(alloc, .{ .sprite = .{
-            .asset = AssetId.splash_tagline,
-            .x = 160,
-            .y = 420,
-        } });
+        try list.append(alloc, .{
+            .sprite = .{
+                .asset = AssetId.splash_tagline,
+                .dst = .{ .x = 160, .y = 420, .w = 0, .h = 0 }, // w/h ignored when 0
+            },
+        });
 
         return list;
     }

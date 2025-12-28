@@ -69,7 +69,9 @@ pub const CombatView = struct {
         _ = self;
         // Space/Enter to end turn, Escape to cancel, etc.
         switch (keycode) {
-            .q => { std.process.exit(0); },
+            .q => {
+                std.process.exit(0);
+            },
             .space => return Command{ .end_turn = {} },
             else => return null,
         }
@@ -127,6 +129,10 @@ pub const CombatView = struct {
 
         // TODO: render
         // - player hand (cards at bottom)
+        // for (self.playerHand(), 0..) |card, i| {
+        //     _ = card;
+        //     _ = i;
+        // }
         // - enemies (top area)
         // - engagement info / advantage bars
         // - stamina/time indicators

@@ -116,7 +116,7 @@ pub const UX = struct {
         for (renderables) |r| {
             switch (r) {
                 .sprite => |sprite| try self.renderSprite(sprite),
-                .rect => |r_rect| try self.renderRect(r_rect),
+                .filled_rect => |fr| try self.renderFilledRect(fr),
                 .text => {
                     // TODO: dynamic text rendering
                 },
@@ -130,25 +130,24 @@ pub const UX = struct {
         const tex = self.getTexture(sprite.asset) orelse return;
         const tex_w, const tex_h = try tex.getSize();
 
-        const src = rect.FRect{ .x = 0, .y = 0, .w = tex_w, .h = tex_h };
-        const dst = rect.FRect{
-            .x = sprite.x,
-            .y = sprite.y,
-            .w = sprite.w orelse tex_w,
-            .h = sprite.h orelse tex_h,
-        };
+        const src = sprite.src orelse rect.FRect{ .x = 0, .y = 0, .w = tex_w, .h = tex_h };
+        const dst = if (sprite.dst) |d|
+            // Use provided dst, but substitute texture size if w/h are 0
+            rect.FRect{
+                .x = d.x,
+                .y = d.y,
+                .w = if (d.w == 0) tex_w else d.w,
+                .h = if (d.h == 0) tex_h else d.h,
+            }
+        else
+            rect.FRect{ .x = 0, .y = 0, .w = tex_w, .h = tex_h };
 
         try self.renderer.renderTexture(tex, src, dst);
     }
 
-    fn renderRect(self: *UX, r: view.Rect) !void {
-        try self.renderer.setDrawColor(.{
-            .r = r.fill_r,
-            .g = r.fill_g,
-            .b = r.fill_b,
-            .a = r.fill_a,
-        });
-        try self.renderer.renderFillRect(.{ .x = r.x, .y = r.y, .w = r.w, .h = r.h });
+    fn renderFilledRect(self: *UX, fr: view.FilledRect) !void {
+        try self.renderer.setDrawColor(fr.color);
+        try self.renderer.renderFillRect(fr.rect);
     }
 };
 

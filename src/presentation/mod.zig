@@ -10,9 +10,11 @@ pub const controls = @import("controls.zig");
 pub const coordinator = @import("coordinator.zig");
 pub const effects = @import("effects.zig");
 pub const view = @import("views/view.zig");
+pub const card_renderer = @import("card_renderer.zig");
 
 // Type aliases
 pub const UX = graphics.UX;
 pub const Coordinator = coordinator.Coordinator;
 pub const EffectSystem = effects.EffectSystem;
+pub const CardRenderer = card_renderer.CardRenderer;
 pub const View = view.View;

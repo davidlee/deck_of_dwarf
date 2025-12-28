@@ -13,6 +13,11 @@ const menu = @import("menu.zig");
 const combat = @import("combat.zig");
 const summary = @import("summary.zig");
 
+// Re-export SDL types for view layer
+pub const Point = s.rect.FPoint;
+pub const Rect = s.rect.FRect;
+pub const Color = s.pixels.Color;
+
 // Asset identifiers - views reference assets by ID, UX resolves to textures
 pub const AssetId = enum {
     splash_background,
@@ -24,43 +29,27 @@ pub const AssetId = enum {
 pub const Renderable = union(enum) {
     sprite: Sprite,
     text: Text,
-    rect: Rect,
-    // TODO: add more as needed
+    filled_rect: FilledRect,
 };
 
 pub const Sprite = struct {
     asset: AssetId,
-    x: f32,
-    y: f32,
-    w: ?f32 = null, // null = use texture's native size
-    h: ?f32 = null,
+    dst: ?Rect = null, // null = texture's native size at (0,0)
+    src: ?Rect = null, // null = entire texture
     rotation: f32 = 0,
-    alpha: f32 = 1.0,
+    alpha: u8 = 255,
 };
 
 pub const Text = struct {
     content: []const u8,
-    x: f32,
-    y: f32,
+    pos: Point,
     size: f32 = 16,
-    // color, font, etc.
+    color: Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
 };
 
-pub const Rect = struct {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    fill_r: u8 = 0,
-    fill_g: u8 = 0,
-    fill_b: u8 = 0,
-    fill_a: u8 = 255,
-};
-
-// Logical coordinates (for input hit testing)
-pub const Point = struct {
-    x: f32,
-    y: f32,
+pub const FilledRect = struct {
+    rect: Rect,
+    color: Color,
 };
 
 // Input event (simplified from SDL)
