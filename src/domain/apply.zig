@@ -85,6 +85,21 @@ pub const EventProcessor = struct {
         };
     }
 
+    /// Draw cards from deck to hand
+    fn drawCardsToHand(self: *EventProcessor, count: usize) !void {
+        const pd = switch (self.world.player.cards) {
+            .deck => |*d| d,
+            .pool => return, // pools don't draw
+        };
+
+        const to_draw = @min(count, pd.draw.items.len);
+        for (0..to_draw) |_| {
+            if (pd.draw.items.len == 0) break;
+            const card_id = pd.draw.items[0].id;
+            try pd.move(card_id, .draw, .hand);
+        }
+    }
+
     pub fn dispatchEvent(self: *EventProcessor, event_system: *EventSystem) !bool {
         const result = event_system.pop();
         if (result) |event| {
@@ -92,6 +107,12 @@ pub const EventProcessor = struct {
             switch (event) {
                 .game_state_transitioned_to => |state| {
                     std.debug.print("\nSTATE ==> {}\n\n", .{state});
+
+                    // Draw cards when entering draw_hand state
+                    if (state == .draw_hand) {
+                        try self.drawCardsToHand(5);
+                    }
+
                     for (self.world.encounter.?.enemies.items) |mob| {
                         for (mob.cards.deck.in_play.items) |instance| {
                             log("cards in play (mob): {s}\n", .{instance.template.name});

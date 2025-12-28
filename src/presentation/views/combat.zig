@@ -14,9 +14,13 @@ const s = @import("sdl3");
 const Renderable = view.Renderable;
 const InputEvent = view.InputEvent;
 const Point = view.Point;
+const Rect = view.Rect;
+const CardViewModel = view.CardViewModel;
+const CardState = view.CardState;
 const Command = infra.commands.Command;
 const ID = infra.commands.ID;
 const Keycode = s.keycode.Keycode;
+const card_renderer = @import("../card_renderer.zig");
 
 pub const CombatView = struct {
     world: *const World,
@@ -54,14 +58,22 @@ pub const CombatView = struct {
     fn handleClick(self: *CombatView, pos: Point) ?Command {
         // Hit test cards in hand
         if (self.hitTestHand(pos)) |card_id| {
+            std.debug.print("CARD HIT: id={d}:{d} at ({d:.0}, {d:.0})\n", .{
+                card_id.index,
+                card_id.generation,
+                pos.x,
+                pos.y,
+            });
             return Command{ .play_card = .{ .card_id = card_id } };
         }
 
         // Hit test enemies (for targeting)
         if (self.hitTestEnemies(pos)) |target_id| {
+            std.debug.print("ENEMY HIT: id={d}:{d}\n", .{ target_id.index, target_id.generation });
             return Command{ .select_target = .{ .target_id = target_id } };
         }
 
+        std.debug.print("CLICK MISS at ({d:.0}, {d:.0})\n", .{ pos.x, pos.y });
         return null;
     }
 
@@ -81,17 +93,16 @@ pub const CombatView = struct {
 
     fn hitTestHand(self: *CombatView, pos: Point) ?ID {
         const hand = self.playerHand();
-        const card_width: f32 = 100;
-        const card_height: f32 = 140;
-        const hand_y: f32 = 500; // bottom of screen
-        const start_x: f32 = 100;
-        const spacing: f32 = 110;
 
         for (hand, 0..) |card, i| {
-            const card_x = start_x + @as(f32, @floatFromInt(i)) * spacing;
-            if (pos.x >= card_x and pos.x < card_x + card_width and
-                pos.y >= hand_y and pos.y < hand_y + card_height)
-            {
+            const card_x = hand_layout.start_x + @as(f32, @floatFromInt(i)) * hand_layout.spacing;
+            const card_rect = Rect{
+                .x = card_x,
+                .y = hand_layout.y,
+                .w = hand_layout.card_width,
+                .h = hand_layout.card_height,
+            };
+            if (card_rect.pointIn(pos)) {
                 return toCommandID(card.id);
             }
         }
@@ -122,23 +133,51 @@ pub const CombatView = struct {
         return .{ .index = eid.index, .generation = eid.generation };
     }
 
-    // Rendering
+    // Rendering - layout constants (shared with hit testing)
+
+    const hand_layout = struct {
+        const card_width: f32 = card_renderer.CARD_WIDTH;
+        const card_height: f32 = card_renderer.CARD_HEIGHT;
+        const y: f32 = 400; // bottom area
+        const start_x: f32 = 100;
+        const spacing: f32 = card_width + 10;
+    };
 
     pub fn renderables(self: *const CombatView, alloc: std.mem.Allocator) !std.ArrayList(Renderable) {
-        const list = try std.ArrayList(Renderable).initCapacity(alloc, 32);
+        var list = try std.ArrayList(Renderable).initCapacity(alloc, 32);
 
-        // TODO: render
-        // - player hand (cards at bottom)
-        // for (self.playerHand(), 0..) |card, i| {
-        //     _ = card;
-        //     _ = i;
-        // }
-        // - enemies (top area)
-        // - engagement info / advantage bars
-        // - stamina/time indicators
-        // - phase indicator
+        // Debug: dark background to show combat view is active
+        try list.append(alloc, .{
+            .filled_rect = .{
+                .rect = .{ .x = 0, .y = 0, .w = 800, .h = 600 },
+                .color = .{ .r = 20, .g = 25, .b = 30, .a = 255 },
+            },
+        });
 
-        _ = self;
+        // Player hand
+        const hand = self.playerHand();
+        for (hand, 0..) |card, i| {
+            const x = hand_layout.start_x + @as(f32, @floatFromInt(i)) * hand_layout.spacing;
+
+            const card_vm = CardViewModel.fromInstance(card.*, .{});
+
+            try list.append(alloc, .{
+                .card = .{
+                    .model = card_vm,
+                    .dst = Rect{
+                        .x = x,
+                        .y = hand_layout.y,
+                        .w = hand_layout.card_width,
+                        .h = hand_layout.card_height,
+                    },
+                },
+            });
+        }
+
+        // TODO: enemies (top area)
+        // TODO: engagement info / advantage bars
+        // TODO: stamina/time indicators
+        // TODO: phase indicator
 
         return list;
     }

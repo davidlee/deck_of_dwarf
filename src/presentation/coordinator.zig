@@ -74,8 +74,6 @@ pub const Coordinator = struct {
             else => return null,
         };
 
-        std.debug.print("input event: {any}", .{input_event});
-
         var v = self.activeView();
         return v.handleInput(input_event);
     }

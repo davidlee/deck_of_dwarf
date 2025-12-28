@@ -83,7 +83,7 @@ pub const CardRenderer = struct {
 
     const CacheEntry = struct {
         texture: Texture,
-        state_hash: u32, // to detect state changes
+        state_hash: u8, // to detect state changes
     };
 
     pub fn init(alloc: std.mem.Allocator, renderer: Renderer) CardRenderer {
@@ -144,15 +144,16 @@ pub const CardRenderer = struct {
         return @as(u64, id.index) | (@as(u64, id.generation) << 32);
     }
 
-    fn stateToHash(state: CardState) u32 {
-        return @bitCast(state);
+    fn stateToHash(state: CardState) u8 {
+        const bits: u4 = @bitCast(state);
+        return bits;
     }
 
     /// Render card to a new texture
     fn renderCard(self: *CardRenderer, card: CardViewModel) !Texture {
         const tex = try Texture.init(
             self.renderer,
-            .rgba8888,
+            .packed_rgba_8_8_8_8,
             .target,
             @intFromFloat(CARD_WIDTH),
             @intFromFloat(CARD_HEIGHT),

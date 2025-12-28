@@ -12,11 +12,16 @@ const splash = @import("splash.zig");
 const menu = @import("menu.zig");
 const combat = @import("combat.zig");
 const summary = @import("summary.zig");
+pub const card_view = @import("card_view.zig");
 
 // Re-export SDL types for view layer
 pub const Point = s.rect.FPoint;
 pub const Rect = s.rect.FRect;
 pub const Color = s.pixels.Color;
+
+// Re-export card view model
+pub const CardViewModel = card_view.CardViewModel;
+pub const CardState = card_view.CardState;
 
 // Asset identifiers - views reference assets by ID, UX resolves to textures
 pub const AssetId = enum {
@@ -30,6 +35,13 @@ pub const Renderable = union(enum) {
     sprite: Sprite,
     text: Text,
     filled_rect: FilledRect,
+    card: Card,
+};
+
+// Card renderable - UX will use CardRenderer to get/create texture
+pub const Card = struct {
+    model: CardViewModel,
+    dst: Rect, // where to draw (position + size)
 };
 
 pub const Sprite = struct {

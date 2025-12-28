@@ -4,8 +4,10 @@ const Cast = lib.util.Cast;
 const s = @import("sdl3");
 const rect = s.rect;
 const view = @import("views/view.zig");
+const card_renderer = @import("card_renderer.zig");
 const AssetId = view.AssetId;
 const Renderable = view.Renderable;
+const CardRenderer = card_renderer.CardRenderer;
 
 pub const UIState = struct {
     zoom: f32,
@@ -39,6 +41,7 @@ pub const UX = struct {
     window: s.video.Window,
     fps_capper: s.extras.FramerateCapper(f32),
     assets: [AssetCount]?s.render.Texture,
+    cards: CardRenderer,
 
     /// initialise the presentation layer
     pub fn init(alloc: std.mem.Allocator, config: *const lib.config.Config) !UX {
@@ -89,10 +92,12 @@ pub const UX = struct {
             .renderer = renderer,
             .fps_capper = s.extras.FramerateCapper(f32){ .mode = .{ .limited = config.fps } },
             .assets = assets,
+            .cards = CardRenderer.init(alloc, renderer),
         };
     }
 
     pub fn deinit(self: *UX) void {
+        self.cards.deinit();
         for (&self.assets) |*asset| {
             if (asset.*) |tex| tex.deinit();
         }
@@ -117,6 +122,7 @@ pub const UX = struct {
             switch (r) {
                 .sprite => |sprite| try self.renderSprite(sprite),
                 .filled_rect => |fr| try self.renderFilledRect(fr),
+                .card => |card| try self.renderCard(card),
                 .text => {
                     // TODO: dynamic text rendering
                 },
@@ -124,6 +130,14 @@ pub const UX = struct {
         }
 
         try self.renderer.present();
+    }
+
+    fn renderCard(self: *UX, card: view.Card) !void {
+        const tex = try self.cards.getCardTexture(card.model);
+        const tex_w, const tex_h = try tex.getSize();
+
+        const src = rect.FRect{ .x = 0, .y = 0, .w = tex_w, .h = tex_h };
+        try self.renderer.renderTexture(tex, src, card.dst);
     }
 
     fn renderSprite(self: *UX, sprite: view.Sprite) !void {
