@@ -24,6 +24,8 @@ pub const UIState = struct {
 // although for now we might allow some haxx in the name of forward progress
 //
 
+const font_path = "assets/font/Caudex-Bold.ttf";
+const tagline = "When life gives you goblins, make goblinade.";
 pub const UX = struct {
     alloc: std.mem.Allocator,
     ui: UIState,
@@ -31,6 +33,7 @@ pub const UX = struct {
     window: s.video.Window,
     fps_capper: s.extras.FramerateCapper(f32),
     menu_img: s.render.Texture,
+    tagline: s.render.Texture,
 
     /// initialise the presentation layer
     ///
@@ -59,6 +62,21 @@ pub const UX = struct {
             .letter_box,
         );
 
+        try s.ttf.init();
+        defer s.ttf.quit();
+        // std.debug.print("Linked against SDL_ttf version: {any}", .{s.ttf.getVersion()});
+
+        var font = try s.ttf.Font.init(font_path, 24);
+        defer font.deinit();
+
+        const white: s.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
+        // const yellow: s.ttf.Color = .{ .r = 255, .g = 255, .b = 0, .a = 255 };
+        // const cyan: s.ttf.Color = .{ .r = 0, .g = 255, .b = 255, .a = 255 };
+        // const magenta: s.ttf.Color = .{ .r = 255, .g = 0, .b = 255, .a = 255 };
+
+        const solid_texture = try textureFromSurface(renderer, try font.renderTextBlended(tagline, white));
+        // defer solid_texture.deinit();
+
         return UX{
             .alloc = alloc,
             .ui = UIState.init(),
@@ -66,12 +84,15 @@ pub const UX = struct {
             .renderer = renderer,
             .fps_capper = s.extras.FramerateCapper(f32){ .mode = .{ .limited = config.fps } },
             .menu_img = img,
+            .tagline = solid_texture,
         };
     }
 
     pub fn deinit(self: *UX) void {
         self.window.deinit();
         self.renderer.deinit();
+        self.menu_img.deinit();
+        self.tagline.deinit();
     }
 
     // Convert screen coordinates to logical coordinates (accounts for scaling/letterbox)
@@ -87,11 +108,22 @@ pub const UX = struct {
 
         try self.renderer.clear();
 
-        const w, const h = try self.menu_img.getSize();
-        const src = s.rect.FRect{ .x = 0, .y = 0, .w = w, .h = h };
-        const dst = s.rect.FRect{ .x = 0, .y = 0, .w = w, .h = h };
+        var w, var h = try self.menu_img.getSize();
+
+        var src = s.rect.FRect{ .x = 0, .y = 0, .w = w, .h = h };
+        var dst = s.rect.FRect{ .x = 0, .y = 0, .w = w, .h = h };
+
         try self.renderer.renderTexture(self.menu_img, src, dst);
 
+        w, h = try self.tagline.getSize();
+        src = s.rect.FRect{ .x = 0, .y = 0, .w = w, .h = h };
+        dst = s.rect.FRect{ .x = 160, .y = 420, .w = w, .h = h };
+        try self.renderer.renderTexture(self.tagline, src, dst);
         try self.renderer.present();
     }
 };
+
+fn textureFromSurface(renderer: s.render.Renderer, surface: s.surface.Surface) !s.render.Texture {
+    defer surface.deinit();
+    return try renderer.createTextureFromSurface(surface);
+}

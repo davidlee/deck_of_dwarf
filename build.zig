@@ -18,6 +18,7 @@ fn buildBin(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.built
         .optimize = optimize,
         .callbacks = true,
         .ext_image = true,
+        .ext_ttf = true,
     });
 
     //
@@ -191,6 +192,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .callbacks = true,
         .ext_image = true,
+        .ext_ttf = true,
     }).module("sdl3"));
 
     const run_main_tests = b.addRunArtifact(main_tests);
