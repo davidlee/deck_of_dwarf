@@ -25,11 +25,14 @@ pub const TitleScreenView = struct {
         _ = self;
         _ = world;
         _ = vs;
-        switch (event) {
-            .key_down, .mouse_button_down => return .{ .command = .{ .start_game = {} } },
-            else => {},
-        }
-        return .{};
+        const ok = switch (event) {
+            .key_up => |data| (data.key.? == .space),
+            .mouse_button_down => true,
+            else => false,
+        };
+        if (ok) {
+            return .{ .command = .{ .start_game = {} } };
+        } else return .{};
     }
 
     pub fn renderables(self: *const TitleScreenView, alloc: std.mem.Allocator, vs: ViewState) !std.ArrayList(Renderable) {

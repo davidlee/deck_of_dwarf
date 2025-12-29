@@ -76,6 +76,12 @@ pub const CombatView = struct {
                         .selected_card = cs.selected_card,
                         .hover_target = cs.hover_target,
                     }) };
+                } else {
+                    if (self.hitTestHand(vs.mouse)) |ds| {
+                        return self.setHover(vs, ds.id);
+                    } else {
+                        return self.setHover(vs, null);
+                    }
                 }
             },
             .key_down => |data| {
@@ -88,17 +94,35 @@ pub const CombatView = struct {
         return .{};
     }
 
+    fn setHover(self: *CombatView, vs: ViewState, id: ?entity.ID) InputResult {
+        _ = self;
+        if (id) |eid| {
+            if (vs.combat == null) {
+                return .{ .vs = vs.withCombat(CombatState{ .hover_target = eid }) };
+            } else if (vs.combat.?.hover_target == null or vs.combat.?.hover_target.?.index != eid.index) {
+                var cs = vs.combat.?;
+                cs.hover_target = eid;
+                return .{ .vs = vs.withCombat(cs) };
+            } else {
+                return .{}; // no change
+            }
+        } else {
+            if (vs.combat == null) {
+                return .{};
+            } else {
+                var cs = vs.combat.?;
+                cs.hover_target = null;
+                return .{ .vs = vs.withCombat(cs) };
+            }
+        }
+        return .{};
+    }
+
     fn handleClick(self: *CombatView, pos: Point, vs: ViewState, cs: CombatState) InputResult {
         _ = cs;
 
         // Hit test cards in hand
         if (self.hitTestHand(pos)) |drag| {
-            std.debug.print("CARD HIT: id={d}:{d} at ({d:.0}, {d:.0})\n", .{
-                drag.id.index,
-                drag.id.generation,
-                pos.x,
-                pos.y,
-            });
 
             // Start drag, don't emit command yet (wait for drop)
             return .{
@@ -202,7 +226,7 @@ pub const CombatView = struct {
         const card_width: f32 = card_renderer.CARD_WIDTH;
         const card_height: f32 = card_renderer.CARD_HEIGHT;
         const y: f32 = 400; // bottom area
-        const start_x: f32 = 100;
+        const start_x: f32 = 10;
         const spacing: f32 = card_width + 10;
     };
 
@@ -246,12 +270,14 @@ pub const CombatView = struct {
                     },
                 };
             } else {
+                const hvr = if (vs.combat != null and vs.combat.?.hover_target != null and vs.combat.?.hover_target.?.index == card.id.index) true else false;
+
                 try list.append(alloc, .{
                     .card = .{
                         .model = card_vm,
                         .dst = .{
-                            .x = base_x,
-                            .y = base_y,
+                            .x = if (hvr) base_x + 5 else base_x,
+                            .y = if (hvr) base_y - 10 else base_y,
                             .w = hand_layout.card_width,
                             .h = hand_layout.card_height,
                         },
