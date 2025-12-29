@@ -13,7 +13,9 @@ const harness = @import("harness.zig");
 const resolution = @import("domain/resolution.zig");
 const weapon_list = @import("domain/weapon_list.zig");
 const tick = @import("domain/tick.zig");
-const CommandHandler = @import("domain/apply.zig").CommandHandler;
+const apply = @import("domain/apply.zig");
+const CommandHandler = apply.CommandHandler;
+const CommandError = apply.CommandError;
 
 // const coordinator = @import("presentation/coordinator.zig");
 const presentation = @import("presentation/mod.zig");
@@ -59,11 +61,12 @@ pub fn main() !void {
                 .quit => quit = true,
                 .terminating => quit = true,
                 else => {
+                    // if the coordinator yields a command from user input, handle it
                     const cmd = coordinator.handleInput(event);
-                    if (cmd) |c| try world.commandHandler.handle(c);
+                    if (cmd) |c| world.commandHandler.handle(c) catch |err| log("ERR: {any}\n", .{err});
 
+                    // or it might be a system event. let coordinator figure it out.
                     coordinator.processSystemEvent(event);
-                    // std.debug.print("event: {any} \n",.{event});
                 },
             };
 

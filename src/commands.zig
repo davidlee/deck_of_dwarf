@@ -21,8 +21,8 @@ pub const Command = union(enum) {
     resume_game: void,
 
     // Combat - card selection
-    play_card: struct { card_id: ID },
-    cancel_card: struct { card_id: ID },
+    play_card: ID,
+    cancel_card: ID,
     end_turn: void,
 
     // Combat - targeting

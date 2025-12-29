@@ -39,7 +39,7 @@ pub const Deck = struct {
     techniques: std.StringHashMap(*const cards.Technique),
 
     fn moveInternal(self: *Deck, id: entity.ID, from: *std.ArrayList(*Instance), to: *std.ArrayList(*Instance)) !void {
-        const i = try Deck.find(id, from);
+        const i = try Deck.findInternal(id, from);
         const instance = from.orderedRemove(i);
         try to.append(self.alloc, instance);
     }
@@ -56,7 +56,7 @@ pub const Deck = struct {
         };
     }
 
-    fn find(id: entity.ID, pile: *std.ArrayList(*Instance)) !usize {
+    fn findInternal( id: entity.ID, pile: *std.ArrayList(*Instance)) !usize {
         var i: usize = 0;
         while (i < pile.items.len) : (i += 1) {
             const card = pile.items[i];
@@ -138,8 +138,14 @@ pub const Deck = struct {
         try self.moveInternal(id, self.pileForZone(from), self.pileForZone(to));
     }
 
+    pub fn find(self: *Deck, id: entity.ID, zone: Zone) !*Instance {
+        const pile = self.pileForZone(zone);
+        const i = try Deck.findInternal(id, pile);
+        return pile.items[i];
+    }
+
     pub fn instanceInZone(self: *Deck, id: entity.ID, zone: Zone) bool {
-        _ = Deck.find(id, self.pileForZone(zone)) catch return false;
+        _ = Deck.findInternal(id, self.pileForZone(zone)) catch return false;
         return true;
     }
 };

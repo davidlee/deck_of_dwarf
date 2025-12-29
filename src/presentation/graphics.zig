@@ -9,25 +9,6 @@ const AssetId = view.AssetId;
 const Renderable = view.Renderable;
 const CardRenderer = card_renderer.CardRenderer;
 
-// pub const UIState = struct {
-//     zoom: f32,
-//     screen: rect.IRect,
-//     camera: rect.IRect,
-//     mouse: rect.FPoint,
-//     pub fn init() UIState {
-//         return UIState{
-//             .zoom = 1.0,
-//             .screen = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
-//             .camera = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
-//             .mouse = .{ .x = 0, .y = 0 },
-//         };
-//     }
-// };
-
-// IMPORTANT: this shouldn't know shit about the World (logical model)
-// although for now we might allow some haxx in the name of forward progress
-//
-
 const font_path = "assets/font/Caudex-Bold.ttf";
 const tagline_text = "When life gives you goblins, make goblinade.";
 
@@ -36,12 +17,33 @@ const AssetCount = @typeInfo(AssetId).@"enum".fields.len;
 
 pub const UX = struct {
     alloc: std.mem.Allocator,
-    // ui: UIState,
     renderer: s.render.Renderer,
     window: s.video.Window,
     fps_capper: s.extras.FramerateCapper(f32),
     assets: [AssetCount]?s.render.Texture,
     cards: CardRenderer,
+    font: s.ttf.Font,
+
+    const SpriteEntry = struct {
+        filename: [:0]const u8,
+        id: AssetId,
+        scale_mode: s.surface.ScaleMode = .nearest,
+    };
+
+    // Sprites loaded after splash (splash is special - needed for logical presentation size)
+    const sprites = [_]SpriteEntry{
+        .{ .filename = "assets/halberdier.png", .id = .player_halberdier },
+        .{ .filename = "assets/fredrick-snail.png", .id = .fredrick_snail },
+        .{ .filename = "assets/mob-thief.png", .id = .thief },
+    };
+
+    fn loadSprites(assets: *[AssetCount]?s.render.Texture, renderer: s.render.Renderer) !void {
+        for (sprites) |entry| {
+            const tex = try s.image.loadTexture(renderer, entry.filename);
+            try tex.setScaleMode(entry.scale_mode);
+            assets[@intFromEnum(entry.id)] = tex;
+        }
+    }
 
     /// initialise the presentation layer
     pub fn init(alloc: std.mem.Allocator, config: *const lib.config.Config) !UX {
@@ -53,7 +55,7 @@ pub const UX = struct {
         );
         errdefer window.deinit();
 
-        const renderer = try s.render.Renderer.init(
+        var renderer = try s.render.Renderer.init(
             window,
             null,
         );
@@ -72,13 +74,14 @@ pub const UX = struct {
             .letter_box,
         );
 
-        // Load tagline as pre-rendered text
+        try loadSprites(&assets, renderer);
+
+        // Load font (kept alive for card rendering)
         try s.ttf.init();
-        defer s.ttf.quit();
+        const font = try s.ttf.Font.init(font_path, 24);
+        errdefer font.deinit();
 
-        var font = try s.ttf.Font.init(font_path, 24);
-        defer font.deinit();
-
+        // Pre-render tagline
         const white: s.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
         assets[@intFromEnum(AssetId.splash_tagline)] = try textureFromSurface(
             renderer,
@@ -87,17 +90,19 @@ pub const UX = struct {
 
         return UX{
             .alloc = alloc,
-            // .ui = UIState.init(),
             .window = window,
             .renderer = renderer,
             .fps_capper = s.extras.FramerateCapper(f32){ .mode = .{ .limited = config.fps } },
             .assets = assets,
-            .cards = CardRenderer.init(alloc, renderer),
+            .cards = CardRenderer.init(alloc, renderer, font),
+            .font = font,
         };
     }
 
     pub fn deinit(self: *UX) void {
         self.cards.deinit();
+        self.font.deinit();
+        s.ttf.quit();
         for (&self.assets) |*asset| {
             if (asset.*) |tex| tex.deinit();
         }

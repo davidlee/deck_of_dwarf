@@ -38,6 +38,11 @@ pub const Event = union(enum) {
     card_cost_reserved: struct {
         stamina: f32,
         time: f32,
+    },
+
+    card_cost_returned: struct {
+        stamina: f32,
+        time: f32,
         // TODO instances -> [exhausted?]
     },
 

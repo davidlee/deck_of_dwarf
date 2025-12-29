@@ -34,7 +34,9 @@ pub const CardState = card_view.CardState;
 pub const AssetId = enum {
     splash_background,
     splash_tagline,
-    // TODO: add more as needed
+    player_halberdier,
+    fredrick_snail,
+    thief,
 };
 
 // Renderable primitives - what UX knows how to draw

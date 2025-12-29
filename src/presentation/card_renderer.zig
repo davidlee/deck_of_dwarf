@@ -15,6 +15,7 @@ const CardState = card_view.CardState;
 const Texture = s.render.Texture;
 const Renderer = s.render.Renderer;
 const Color = s.pixels.Color;
+const Font = s.ttf.Font;
 
 /// Card instance ID for cache keying (matches entity.ID layout)
 pub const CardInstanceID = packed struct {
@@ -79,18 +80,19 @@ pub const CardRenderer = struct {
     renderer: Renderer,
     cache: std.AutoHashMap(u64, CacheEntry),
     alloc: std.mem.Allocator,
-    // TODO: font handle for text rendering
+    font: Font,
 
     const CacheEntry = struct {
         texture: Texture,
         state_hash: u8, // to detect state changes
     };
 
-    pub fn init(alloc: std.mem.Allocator, renderer: Renderer) CardRenderer {
+    pub fn init(alloc: std.mem.Allocator, renderer: Renderer, font: Font) CardRenderer {
         return .{
             .renderer = renderer,
             .cache = std.AutoHashMap(u64, CacheEntry).init(alloc),
             .alloc = alloc,
+            .font = font,
         };
     }
 
@@ -182,7 +184,8 @@ pub const CardRenderer = struct {
             });
         }
 
-        // TODO: drawCardName, drawCardText
+        // Card name
+        try self.drawCardName(card.name);
 
         return tex;
     }
@@ -249,5 +252,28 @@ pub const CardRenderer = struct {
         });
 
         // TODO: render stamina_cost as text
+    }
+
+    fn drawCardName(self: *CardRenderer, name: []const u8) !void {
+        if (name.len == 0) return;
+
+        const white: s.ttf.Color = .{ .r = 255, .g = 255, .b = 255, .a = 255 };
+        const text_surface = try self.font.renderTextBlended(name, white);
+        defer text_surface.deinit();
+
+        const text_tex = try self.renderer.createTextureFromSurface(text_surface);
+        defer text_tex.deinit();
+
+        const tex_w, const tex_h = try text_tex.getSize();
+
+        // Center horizontally, position below cost indicator
+        const x = (CARD_WIDTH - tex_w) / 2;
+        const y: f32 = 45;
+
+        try self.renderer.renderTexture(
+            text_tex,
+            .{ .x = 0, .y = 0, .w = tex_w, .h = tex_h },
+            .{ .x = x, .y = y, .w = tex_w, .h = tex_h },
+        );
     }
 };
