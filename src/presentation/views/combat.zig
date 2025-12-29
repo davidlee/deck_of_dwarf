@@ -26,6 +26,12 @@ const ID = infra.commands.ID;
 const Keycode = s.keycode.Keycode;
 const card_renderer = @import("../card_renderer.zig");
 
+const CardViewState = enum {
+    normal,
+    hover,
+    drag,
+};
+
 pub const CombatView = struct {
     world: *const World,
 
@@ -37,6 +43,10 @@ pub const CombatView = struct {
 
     pub fn playerHand(self: *const CombatView) []const *cards.Instance {
         return self.world.player.cards.deck.hand.items;
+    }
+
+    fn playerHandLen(self: *const CombatView) usize {
+        return self.world.player.cards.deck.hand.items.len;
     }
 
     pub fn enemies(self: *const CombatView) []const *combat.Agent {
@@ -77,7 +87,7 @@ pub const CombatView = struct {
                         .hover_target = cs.hover_target,
                     }) };
                 } else {
-                    if (self.hitTestHand(vs.mouse)) |ds| {
+                    if (self.hitTestHand(vs, vs.mouse)) |ds| {
                         return self.setHover(vs, ds.id);
                     } else {
                         return self.setHover(vs, null);
@@ -122,7 +132,7 @@ pub const CombatView = struct {
         _ = cs;
 
         // Hit test cards in hand
-        if (self.hitTestHand(pos)) |drag| {
+        if (self.hitTestHand(vs, pos)) |drag| {
 
             // Start drag, don't emit command yet (wait for drop)
             return .{
@@ -175,30 +185,76 @@ pub const CombatView = struct {
 
     // Hit testing - recomputes layout on demand
 
-    fn hitTestHand(self: *CombatView, pos: Point) ?DragState {
-        const hand = self.playerHand();
+    fn hitTestHand(self: *CombatView, vs: ViewState, pos: Point) ?DragState {
+        for (0..self.playerHandLen()) |i| {
+            const cr = self.cardWithRectByIndex(vs, i);
+            const id = cr.card.id;
+            const rect = cr.rect;
 
-        for (hand, 0..) |card, i| {
-            const card_origin = Point{
-                .x = hand_layout.start_x + @as(f32, @floatFromInt(i)) * hand_layout.spacing,
-                .y = hand_layout.y,
-            };
-            const card_rect = Rect{
-                .x = card_origin.x,
-                .y = card_origin.y,
-                .w = hand_layout.card_width,
-                .h = hand_layout.card_height,
-            };
-
-            if (card_rect.pointIn(pos)) {
+            if (rect.pointIn(pos)) {
                 return DragState{
-                    .id = card.id,
-                    .grab_offset = .{ .x = pos.x - card_origin.x, .y = pos.y - card_origin.y },
-                    .original_pos = card_origin,
+                    .id = id,
+                    .grab_offset = .{ .x = pos.x - rect.x, .y = pos.y - rect.y },
+                    .original_pos = Point{ .x = rect.x, .y = rect.y },
                 };
             }
         }
         return null;
+    }
+
+    const CardWithRect = struct {
+        card: cards.Instance,
+        rect: Rect,
+        state: CardViewState,
+    };
+
+    fn cardWithRectByIndex(self: *const CombatView, vs: ViewState, i: usize) CardWithRect {
+        const cs = vs.combat;
+        const card = self.playerHand()[i];
+        const state = cardViewState(cs, card);
+
+        const base_x = hand_layout.start_x + @as(f32, @floatFromInt(i)) * hand_layout.spacing;
+        const base_y = hand_layout.y;
+
+        switch (state) {
+            .normal => {
+                return .{
+                    .card = card.*,
+                    .rect = .{
+                        .x = base_x,
+                        .y = base_y,
+                        .w = hand_layout.card_width,
+                        .h = hand_layout.card_height,
+                    },
+                    .state = .normal,
+                };
+            },
+            .hover => {
+                return .{
+                    .card = card.*,
+                    .rect = .{
+                        .x = base_x + 3,
+                        .y = base_y - 10,
+                        .w = hand_layout.card_width,
+                        .h = hand_layout.card_height,
+                    },
+                    .state = .hover,
+                };
+            },
+            .drag => {
+                const drag = cs.?.drag.?;
+                return .{
+                    .card = card.*,
+                    .rect = .{
+                        .x = vs.mouse.x - drag.grab_offset.x,
+                        .y = vs.mouse.y - drag.grab_offset.y,
+                        .w = hand_layout.card_width,
+                        .h = hand_layout.card_height,
+                    },
+                    .state = .drag,
+                };
+            },
+        }
     }
 
     fn hitTestEnemies(self: *CombatView, pos: Point) ?entity.ID {
@@ -232,7 +288,6 @@ pub const CombatView = struct {
 
     pub fn renderables(self: *const CombatView, alloc: std.mem.Allocator, vs: ViewState) !std.ArrayList(Renderable) {
         var list = try std.ArrayList(Renderable).initCapacity(alloc, 32);
-        const cs = vs.combat orelse CombatState{};
 
         // Debug: dark background to show combat view is active
         try list.append(alloc, .{
@@ -243,52 +298,19 @@ pub const CombatView = struct {
         });
 
         // Player hand
-        const hand = self.playerHand();
-        var dragged_card: ?Renderable = null;
 
-        for (hand, 0..) |card, i| {
-            const base_x = hand_layout.start_x + @as(f32, @floatFromInt(i)) * hand_layout.spacing;
-            const base_y = hand_layout.y;
+        for (0..self.playerHandLen()) |i| {
+            const cr = self.cardWithRectByIndex(vs, i);
+            const card = cr.card;
+            const rect = cr.rect;
+            const card_vm = CardViewModel.fromInstance(card, .{});
 
-            const card_vm = CardViewModel.fromInstance(card.*, .{});
-
-            // Check if this card is being dragged
-            const is_dragged = if (cs.drag) |drag| drag.id.index == card.id.index and drag.id.generation == card.id.generation else false;
-
-            if (is_dragged) {
-                const drag = cs.drag.?;
-                // Position at mouse minus grab offset
-                dragged_card = .{
-                    .card = .{
-                        .model = card_vm,
-                        .dst = .{
-                            .x = vs.mouse.x - drag.grab_offset.x,
-                            .y = vs.mouse.y - drag.grab_offset.y,
-                            .w = hand_layout.card_width,
-                            .h = hand_layout.card_height,
-                        },
-                    },
-                };
-            } else {
-                const hvr = if (vs.combat != null and vs.combat.?.hover_target != null and vs.combat.?.hover_target.?.index == card.id.index) true else false;
-
-                try list.append(alloc, .{
-                    .card = .{
-                        .model = card_vm,
-                        .dst = .{
-                            .x = if (hvr) base_x + 5 else base_x,
-                            .y = if (hvr) base_y - 10 else base_y,
-                            .w = hand_layout.card_width,
-                            .h = hand_layout.card_height,
-                        },
-                    },
-                });
-            }
-        }
-
-        // Render dragged card last (on top)
-        if (dragged_card) |dc| {
-            try list.append(alloc, dc);
+            try list.append(alloc, .{
+                .card = .{
+                    .model = card_vm,
+                    .dst = rect,
+                },
+            });
         }
 
         // TODO: enemies (top area)
@@ -299,3 +321,14 @@ pub const CombatView = struct {
         return list;
     }
 };
+
+fn cardViewState(cs: ?CombatState, card: *const cards.Instance) CardViewState {
+    // const cs = vs.combat orelse CombatState{};
+    if (cs != null and cs.?.drag != null and cs.?.drag.?.id.index == card.id.index) {
+        return .drag;
+    } else if (cs != null and cs.?.hover_target != null and cs.?.hover_target.?.index == card.id.index) {
+        return .hover;
+    } else {
+        return .normal;
+    }
+}
