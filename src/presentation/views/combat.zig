@@ -13,6 +13,7 @@ const deck = @import("../../domain/deck.zig");
 const combat = @import("../../domain/combat.zig");
 const s = @import("sdl3");
 const entity = infra.entity;
+const chrome = @import("chrome.zig");
 
 const Renderable = view.Renderable;
 const AssetId = view.AssetId;
@@ -91,6 +92,139 @@ const EndTurnButton = struct {
     }
 };
 
+const StatusBarView = struct {
+    stamina: f32,
+    stamina_available: f32,
+    time_available: f32,
+
+    pub fn init(player: *combat.Agent) StatusBarView {
+        return StatusBarView{
+            .stamina = player.stamina,
+            .stamina_available = player.stamina_available,
+            .time_available = player.time_available,
+        };
+    }
+
+    const margin_x = 80;
+    const height = 40;
+    const line = 3;
+    const border = 4;
+    const trim = 5;
+    const pip_spacing = 3;
+    const max_pips = 20;
+    const trim_color = s.pixels.Color{ .r = 10, .g = 10, .b = 10 };
+    const black = s.pixels.Color{ .r = 0, .g = 0, .b = 0 };
+
+    pub fn render(self: *StatusBarView, alloc: std.mem.Allocator, vs: ViewState, list: *std.ArrayList(Renderable)) !void {
+        _ = .{ self, alloc, list, vs };
+
+        // Stamina Bar
+        {
+            const y = 780;
+            const r_outer = Rect{ .x = margin_x, .y = y, .w = (chrome.viewport.w - (2 * margin_x)), .h = height };
+            const r_inner = Rect{ .x = r_outer.x + trim, .y = r_outer.y + trim, .w = r_outer.w - (2 * trim), .h = r_outer.h - (2 * trim) };
+
+            const outer: Renderable = .{ .filled_rect = .{ .rect = r_outer, .color = trim_color } };
+            const inner: Renderable = .{ .filled_rect = .{ .rect = r_inner, .color = black } };
+
+            try list.append(alloc, outer);
+            try list.append(alloc, inner);
+
+            const pip_total_w = r_inner.w - (border * 2);
+            const pip_w = (pip_total_w / max_pips) - pip_spacing;
+
+            for (0..max_pips) |n| {
+                const m: f32 = @floatFromInt(n);
+                const start_x = r_inner.x + border;
+                const pip: Renderable = .{ .filled_rect = .{ .rect = .{
+                    .x = start_x + (m * pip_w) + (m * pip_spacing),
+                    .y = r_inner.y + border,
+                    .w = pip_w,
+                    .h = r_inner.h - border * 2,
+                }, .color = s.pixels.Color{ .r = 0, .g = 30, .b = 0 } } };
+                try list.append(alloc, pip);
+            }
+            for (0..@intFromFloat(@ceil(self.stamina))) |n| {
+                const m: f32 = @floatFromInt(n);
+                const start_x = r_inner.x + border;
+                const pip: Renderable = .{ .filled_rect = .{ .rect = .{
+                    .x = start_x + (m * pip_w) + (m * pip_spacing),
+                    .y = r_inner.y + border,
+                    .w = pip_w,
+                    .h = r_inner.h - border * 2,
+                }, .color = s.pixels.Color{ .r = 0, .g = 60, .b = 0 } } };
+                try list.append(alloc, pip);
+            }
+
+            for (0..@intFromFloat(@ceil(self.stamina_available))) |n| {
+                const m: f32 = @floatFromInt(n);
+                const start_x = r_inner.x + border;
+                const pip: Renderable = .{ .filled_rect = .{ .rect = .{
+                    .x = start_x + (m * pip_w) + (m * pip_spacing) + border,
+                    .y = r_inner.y + border,
+                    .w = pip_w - border * 2,
+                    .h = (r_inner.h - border * 2) / 2,
+                }, .color = s.pixels.Color{ .r = 0, .g = 120, .b = 0 } } };
+                try list.append(alloc, pip);
+            }
+        }
+
+        // Focus Bar
+        {
+            // Stamina Bar
+            //
+            const y = 830;
+            const r_outer = Rect{ .x = margin_x, .y = y, .w = (chrome.viewport.w - (2 * margin_x)), .h = height };
+            const r_inner = Rect{ .x = r_outer.x + trim, .y = r_outer.y + trim, .w = r_outer.w - (2 * trim), .h = r_outer.h - (2 * trim) };
+
+            const outer: Renderable = .{ .filled_rect = .{ .rect = r_outer, .color = trim_color } };
+            const inner: Renderable = .{ .filled_rect = .{ .rect = r_inner, .color = black } };
+
+            try list.append(alloc, outer);
+            try list.append(alloc, inner);
+
+            const pip_total_w = r_inner.w - (border * 2);
+            const pip_w = (pip_total_w / max_pips) - pip_spacing;
+
+            for (0..max_pips) |n| {
+                const m: f32 = @floatFromInt(n);
+                const start_x = r_inner.x + border;
+                const pip: Renderable = .{ .filled_rect = .{ .rect = .{
+                    .x = start_x + (m * pip_w) + (m * pip_spacing),
+                    .y = r_inner.y + border,
+                    .w = pip_w,
+                    .h = r_inner.h - border * 2,
+                }, .color = s.pixels.Color{ .r = 0, .g = 0, .b = 40 } } };
+                try list.append(alloc, pip);
+            }
+
+            for (0..@intFromFloat(@ceil(self.stamina))) |n| {
+                const m: f32 = @floatFromInt(n);
+                const start_x = r_inner.x + border;
+                const pip: Renderable = .{ .filled_rect = .{ .rect = .{
+                    .x = start_x + (m * pip_w) + (m * pip_spacing),
+                    .y = r_inner.y + border,
+                    .w = pip_w,
+                    .h = r_inner.h - border * 2,
+                }, .color = s.pixels.Color{ .r = 0, .g = 0, .b = 90 } } };
+                try list.append(alloc, pip);
+            }
+
+            for (0..@intFromFloat(@ceil(self.stamina_available))) |n| {
+                const m: f32 = @floatFromInt(n);
+                const start_x = r_inner.x + border;
+                const pip: Renderable = .{ .filled_rect = .{ .rect = .{
+                    .x = start_x + (m * pip_w) + (m * pip_spacing) + border,
+                    .y = r_inner.y + border,
+                    .w = pip_w - border * 2,
+                    .h = (r_inner.h - border * 2) / 2,
+                }, .color = s.pixels.Color{ .r = 0, .g = 0, .b = 180 } } };
+                try list.append(alloc, pip);
+            }
+        }
+    }
+};
+
 /// Lightweight view over a card zone (hand, in_play, etc.)
 /// Created on-demand since zone contents are dynamic.
 const CardZoneView = struct {
@@ -135,7 +269,7 @@ const CardZoneView = struct {
             },
             .hover => .{
                 .card = card.*,
-                .rect = .{ .x = base_x + 3, .y = base_y - 10, .w = self.layout.w, .h = self.layout.h },
+                .rect = .{ .x = base_x - 3, .y = base_y - 3, .w = self.layout.w + 6, .h = self.layout.h + 6 },
                 .state = .hover,
             },
             .drag => .{
@@ -164,7 +298,6 @@ const CardZoneView = struct {
         }
     }
 };
-
 
 const PlayerAvatar = struct {
     rect: Rect,
@@ -284,6 +417,14 @@ pub const CombatView = struct {
         return self.world.player.cards.deck.in_play.items;
     }
 
+    pub fn enemyInPlay(self: *const CombatView) []const *cards.Instance {
+        if (self.combat_phase != .commit_phase) return .{};
+        const es = self.world.encounter.?.enemies;
+        if (es.len != 1) unreachable; // FIXME: only works with single mobs
+
+        return self.world.encounter.?.enemies[0].cards.deck.in_play.items;
+    }
+
     // Input handling - returns command + optional view state update
     pub fn handleInput(self: *CombatView, event: s.events.Event, world: *const World, vs: ViewState) InputResult {
         _ = world;
@@ -298,10 +439,28 @@ pub const CombatView = struct {
             },
             .mouse_motion => {
                 if (cs.drag) |_| {
-                    // Drag position derived from mouse in CardZoneView.cardWithRect
                     return .{};
+                } else {
+                    // check for hover
+                    if (self.handZone().hitTest(vs)) |x| {
+                        var new_cs = cs;
+                        new_cs.hover = .{ .card = x };
+                        return .{ .vs = vs.withCombat(new_cs) };
+                    } else if (self.inPlayZone().hitTest(vs)) |x| {
+                        var new_cs = cs;
+                        new_cs.hover = .{ .card = x };
+                        return .{ .vs = vs.withCombat(new_cs) };
+                    } else if (self.opposition.hitTest(vs)) |sprite| {
+                        const id = sprite.id;
+                        var new_cs = cs;
+                        new_cs.hover = .{ .enemy = id };
+                        return .{ .vs = vs.withCombat(new_cs) };
+                    } else if (cs.hover != .none) {
+                        var new_cs = cs;
+                        new_cs.hover = .none;
+                        return .{ .vs = vs.withCombat(new_cs) };
+                    }
                 }
-                // TODO: hover state updates
             },
             .key_down => |data| {
                 if (data.key) |key| {
@@ -365,15 +524,9 @@ pub const CombatView = struct {
     }
 
     pub fn renderables(self: *const CombatView, alloc: std.mem.Allocator, vs: ViewState) !std.ArrayList(Renderable) {
-        var list = try std.ArrayList(Renderable).initCapacity(alloc, 32);
+        const cs = vs.combat orelse CombatState{};
 
-        // Debug: dark background to show combat view is active
-        // try list.append(alloc, .{
-        //     .filled_rect = .{
-        //         .rect = .{ .x = 0, .y = 0, .w = 800, .h = 600 },
-        //         .color = .{ .r = 0, .g = 5, .b = 5, .a = 255 },
-        //     },
-        // });
+        var list = try std.ArrayList(Renderable).initCapacity(alloc, 32);
 
         try list.append(alloc, self.player_avatar.renderable());
         try self.opposition.appendRenderables(alloc, &list);
@@ -390,6 +543,33 @@ pub const CombatView = struct {
             try list.append(alloc, btn);
         }
 
+        // if (self.phase == .commit_phase) {}
+
+        switch (cs.hover) {
+            .enemy => |_| {
+                const xw = 240;
+                const yh = 440;
+
+                // tooltip
+                try list.append(alloc, .{
+                    .filled_rect = .{
+                        .rect = .{ .x = vs.mouse.x - xw / 2, .y = vs.mouse.y + 15, .w = xw, .h = yh },
+                        .color = .{
+                            .r = 100,
+                            .g = 100,
+                            .b = 100,
+                            .a = 255,
+                        },
+                    },
+                });
+            },
+            else => {},
+        }
+        if (cs.hover != .none) {}
+
+        var sb = StatusBarView.init(self.world.player);
+        try sb.render(alloc, vs, &list);
+
         // TODO: enemies (top area)
         // TODO: engagement info / advantage bars
         // TODO: stamina/time indicators
@@ -400,12 +580,16 @@ pub const CombatView = struct {
 };
 
 fn cardViewState(cs: ?CombatState, card: *const cards.Instance) CardViewState {
-    // const cs = vs.combat orelse CombatState{};
-    if (cs != null and cs.?.drag != null and cs.?.drag.?.id.index == card.id.index) {
+    const c = cs orelse CombatState{};
+    if (c.drag != null and c.drag.?.id.index == card.id.index) {
         return .drag;
-    } else if (cs != null and cs.?.hover_target != null and cs.?.hover_target.?.index == card.id.index) {
-        return .hover;
     } else {
-        return .normal;
+        switch (c.hover) {
+            .card => |data| if (data.index == card.id.index) {
+                return .hover;
+            },
+            else => return .normal,
+        }
     }
+    return .normal;
 }

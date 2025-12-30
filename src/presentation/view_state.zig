@@ -36,11 +36,17 @@ pub const ViewState = struct {
     }
 };
 
+const EntityRef = union(enum) {
+    none,
+    card: entity.ID,
+    enemy: entity.ID,
+};
+
 /// Combat view state
 pub const CombatState = struct {
     drag: ?DragState = null,
     selected_card: ?entity.ID = null,
-    hover_target: ?entity.ID = null,
+    hover: EntityRef = .none,
 };
 
 /// Menu view state
