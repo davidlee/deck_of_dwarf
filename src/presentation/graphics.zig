@@ -147,6 +147,34 @@ pub const UX = struct {
         return self.renderer.renderCoordinatesFromWindowCoordinates(screen) catch screen;
     }
 
+    pub fn renderClear(self: *UX) !void {
+        try self.renderer.setDrawColor(s.pixels.Color{ .r = 0, .g = 0, .b = 0 });
+        try self.renderer.clear();
+    }
+
+    pub fn renderWithViewport(self: *UX, renderables: []const Renderable, vp: s.rect.IRect) !void {
+        try self.renderer.setViewport(vp);
+        try self.renderList(renderables);
+        try self.renderer.setViewport(null);
+    }
+
+    pub fn renderList(self: *UX, renderables: []const Renderable) !void {
+        for (renderables) |r| {
+            switch (r) {
+                .sprite => |sprite| try self.renderSprite(sprite),
+                .filled_rect => |fr| try self.renderFilledRect(fr),
+                .card => |card| try self.renderCard(card),
+                .text => {
+                    // TODO: dynamic text rendering
+                },
+            }
+        }
+    }
+
+    pub fn renderFinalize(self: *UX) !void {
+        try self.renderer.present();
+    }
+
     /// MAIN RENDER LOOP
     ///
     /// Render a list of renderables
@@ -182,7 +210,7 @@ pub const UX = struct {
         try self.renderer.present();
     }
 
-    fn renderDebug(self: *UX) !void {
+    pub fn renderDebug(self: *UX) !void {
         try self.renderer.setDrawColor(s.pixels.Color{ .r = 80, .g = 70, .b = 30 });
         const w, const h, _ = try self.renderer.getLogicalPresentation();
         const border = s.rect.FRect{ .x = 0, .y = 0, .w = @floatFromInt(w), .h = @floatFromInt(h) };

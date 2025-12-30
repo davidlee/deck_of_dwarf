@@ -83,15 +83,17 @@ pub const Coordinator = struct {
     // Handle SDL input event
     pub fn handleInput(self: *Coordinator, sdl_event: s.events.Event) ?Command {
         // Update mouse position on any mouse event
+        const vx: f32 = if (self.isChromeActive()) @floatFromInt(chrome.viewport.x) else 0;
+        const vy: f32 = if (self.isChromeActive()) @floatFromInt(chrome.viewport.y) else 0;
         switch (sdl_event) {
             .mouse_button_down, .mouse_button_up => |data| {
-                self.vs.mouse = self.ux.translateCoords(.{ .x = data.x, .y = data.y });
+                self.vs.mouse = self.ux.translateCoords(.{ .x = data.x - vx, .y = data.y - vy });
             },
             .mouse_wheel => |data| {
-                self.vs.mouse = self.ux.translateCoords(.{ .x = data.x, .y = data.y });
+                self.vs.mouse = self.ux.translateCoords(.{ .x = data.x - vx, .y = data.y - vy });
             },
             .mouse_motion => |data| {
-                self.vs.mouse = self.ux.translateCoords(.{ .x = data.x, .y = data.y });
+                self.vs.mouse = self.ux.translateCoords(.{ .x = data.x - vx, .y = data.y - vy });
             },
             else => {},
         }
@@ -149,24 +151,37 @@ pub const Coordinator = struct {
 
     // Render current state
     pub fn render(self: *Coordinator) !void {
+        try self.ux.renderClear();
+
         var v = self.activeView();
         // LAYER 1: Game / Active View
         var renderables = try v.renderables(self.alloc, self.vs);
         defer renderables.deinit(self.alloc);
 
-        // LAYER 2: Chrome
-        try self.renderChrome(&renderables);
+        if (self.isChromeActive()) {
+            const c = self.chromeView();
 
-        // LAYER 3: Effects
-        // TODO: also gather effect renderables and append
+            // render game view in a viewport
+            try self.ux.renderWithViewport(renderables.items, chrome.viewport);
 
-        try self.ux.renderView(renderables.items);
+            // LAYER 2: Chrome
+            renderables = try c.renderables(self.alloc, self.vs);
+        }
+
+        try self.ux.renderList(renderables.items); // either game view or chrome
+
+        // LAYER 3: Effects / overlays
+        // todo
+
+        // Layer 4: debug
+        try self.ux.renderDebug();
+        try self.ux.renderFinalize();
     }
 
-    pub fn renderChrome(self: *Coordinator, list: *std.ArrayList(view.Renderable)) !void {
-        if (!self.isChromeActive()) return;
-        const c = self.chromeView();
-
-        try c.appendRenderables(self.alloc, self.vs, list);
-    }
+    // pub fn renderChrome(self: *Coordinator, list: *std.ArrayList(view.Renderable)) !void {
+    //     if (!self.isChromeActive()) return;
+    //     const c = self.chromeView();
+    //
+    //     try c.appendRenderables(self.alloc, self.vs, list);
+    // }
 };

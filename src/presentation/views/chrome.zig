@@ -13,6 +13,7 @@ const ViewState = view.ViewState;
 const InputResult = view.InputResult;
 const Command = infra.commands.Command;
 const Rect = s.rect.FRect;
+const IRect = s.rect.IRect;
 const AssetId = view.AssetId;
 const Color = s.pixels.Color;
 
@@ -25,17 +26,17 @@ const Button = struct {
 
 // FIXME: set reference dimensions in view.zig
 
-pub const logical_h = 1920;
-pub const logical_w = 1080;
+pub const logical_w = 1920;
+pub const logical_h = 1080;
 
 pub const header_h = 100;
 pub const footer_h = 100;
 pub const sidebar_w = 700;
 
 pub const origin = s.rect.FPoint{ .x = 0, .y = header_h };
-pub const viewport = Rect{
-    .x = origin.x,
-    .y = origin.y,
+pub const viewport = IRect{
+    .x = 0,
+    .y = header_h,
     .w = logical_w - sidebar_w,
     .h = logical_h - header_h - footer_h,
 };
@@ -94,10 +95,18 @@ pub const ChromeView = struct {
         return .{};
     }
 
-    pub fn appendRenderables(self: *const ChromeView, alloc: std.mem.Allocator, vs: ViewState, list: *std.ArrayList(Renderable)) !void {
-        //
-        _ = .{ self, alloc, vs, list };
-
+    pub fn renderables(self: *const ChromeView, alloc: std.mem.Allocator, vs: ViewState) !std.ArrayList(Renderable) {
+        _ = vs;
+        _ = self;
+        var list = try std.ArrayList(Renderable).initCapacity(alloc, 8);
         try list.appendSlice(alloc, MenuBar.render());
+        return list;
     }
+
+    // pub fn appendRenderables(self: *const ChromeView, alloc: std.mem.Allocator, vs: ViewState, list: *std.ArrayList(Renderable)) !void {
+    //     //
+    //     _ = .{ self, alloc, vs, list };
+    //
+    //     try list.appendSlice(alloc, MenuBar.render());
+    // }
 };
