@@ -225,26 +225,32 @@ pub const EventProcessor = struct {
         };
     }
 
-    // TODO: fix hardcoded hand limit; only shuffle when deck is refreshed; etc
-    // FIXME: won't cope with an empty draw pile yet
+    // TODO: fix hardcoded hand limit
     fn allShuffleAndDraw(self: *EventProcessor, count: usize) !void {
+        std.debug.print("draw hand: enemies \n", .{});
         if (self.world.encounter) |enc| for (enc.enemies.items) |mob| try self.shuffleAndDraw(mob, count);
+        std.debug.print("draw hand: player \n", .{});
         try self.shuffleAndDraw(self.world.player, count);
     }
 
     /// Shuffle draw pile and draw cards to hand
     fn shuffleAndDraw(self: *EventProcessor, agent: *Agent, count: usize) !void {
-        const pd = switch (agent.cards) {
+        var pd = switch (agent.cards) {
             .deck => |*d| d,
             .pool => return, // pools don't draw
         };
 
-        var rand = self.world.getRandomSource(.shuffler);
-        try pd.shuffleDrawPile(&rand);
+        // const to_draw = @min(count, pd.draw.items.len);
+        for (0..count) |_| {
+            if (pd.draw.items.len == 0) { // need to shuffle the discard pile
+                while (pd.discard.items.len > 0) {
+                    const id = pd.discard.items[0].id;
+                    try pd.move(id, .discard, .draw);
+                }
 
-        const to_draw = @min(count, pd.draw.items.len);
-        for (0..to_draw) |_| {
-            if (pd.draw.items.len == 0) break;
+                var rand = self.world.getRandomSource(.shuffler);
+                try pd.shuffleDrawPile(&rand);
+            }
             const card_id = pd.draw.items[0].id;
             try pd.move(card_id, .draw, .hand);
         }
@@ -266,6 +272,7 @@ pub const EventProcessor = struct {
                         .player_card_selection => {},
                         // Draw cards when entering draw_hand state
                         .draw_hand => {
+                            std.debug.print("draw hand\n", .{});
                             try self.allShuffleAndDraw(5);
                             try self.world.transitionTo(.player_card_selection);
                         },

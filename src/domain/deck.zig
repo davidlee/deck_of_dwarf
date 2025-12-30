@@ -87,6 +87,7 @@ pub const Deck = struct {
             .inventory = try std.ArrayList(*Instance).initCapacity(alloc, 10),
             .exhaust = try std.ArrayList(*Instance).initCapacity(alloc, 10),
 
+            // FIXME: this is a shitty place to store this. move it to cards and make it comptime.
             .techniques = std.StringHashMap(*const cards.Technique).init(alloc),
         };
 
@@ -106,10 +107,11 @@ pub const Deck = struct {
 
             for (0..5) |_| {
                 const instance = try self.createInstance(t);
-                try self.draw.append(alloc, instance);
+                // we put these straight in the discard pile
+                // this simplifies shuffling logic: when the draw pile is empty,
+                // move the discard pile to the draw pile, and shuffle.
+                try self.discard.append(alloc, instance);
             }
-
-            // TODO shuffle, etc
         }
         return self;
     }
