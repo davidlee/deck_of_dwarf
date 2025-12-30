@@ -16,6 +16,9 @@ const summary = @import("summary.zig");
 pub const card_view = @import("card_view.zig");
 pub const vs = @import("../view_state.zig");
 
+pub const logical_w = 1920;
+pub const logical_h = 1080;
+
 // Re-export SDL types for view layer
 pub const Point = s.rect.FPoint;
 pub const Rect = s.rect.FRect;

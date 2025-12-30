@@ -24,10 +24,9 @@ const Button = struct {
     text: []const u8,
 };
 
-// FIXME: set reference dimensions in view.zig
 
-pub const logical_w = 1920;
-pub const logical_h = 1080;
+const logical_w = view.logical_w;
+const logical_h = view.logical_h;
 
 pub const header_h = 100;
 pub const footer_h = 100;

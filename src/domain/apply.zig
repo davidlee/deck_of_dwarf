@@ -112,9 +112,7 @@ pub const CommandHandler = struct {
             .end_turn => {
                 try self.world.transitionTo(.commit_phase);
             },
-            .commit_turn => {
-
-            },
+            .commit_turn => {},
             else => {
                 std.debug.print("UNHANDLED COMMAND: -- {any}", .{cmd});
             },
@@ -227,9 +225,16 @@ pub const EventProcessor = struct {
         };
     }
 
+    // TODO: fix hardcoded hand limit; only shuffle when deck is refreshed; etc
+    // FIXME: won't cope with an empty draw pile yet
+    fn allShuffleAndDraw(self: *EventProcessor, count: usize) !void {
+        if (self.world.encounter) |enc| for (enc.enemies.items) |mob| try self.shuffleAndDraw(mob, count);
+        try self.shuffleAndDraw(self.world.player, count);
+    }
+
     /// Shuffle draw pile and draw cards to hand
-    fn shuffleAndDraw(self: *EventProcessor, count: usize) !void {
-        const pd = switch (self.world.player.cards) {
+    fn shuffleAndDraw(self: *EventProcessor, agent: *Agent, count: usize) !void {
+        const pd = switch (agent.cards) {
             .deck => |*d| d,
             .pool => return, // pools don't draw
         };
@@ -261,7 +266,7 @@ pub const EventProcessor = struct {
                         .player_card_selection => {},
                         // Draw cards when entering draw_hand state
                         .draw_hand => {
-                            try self.shuffleAndDraw(5);
+                            try self.allShuffleAndDraw(5);
                             try self.world.transitionTo(.player_card_selection);
                         },
                         .commit_phase => {},

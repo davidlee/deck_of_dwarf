@@ -177,11 +177,4 @@ pub const Coordinator = struct {
         try self.ux.renderDebug();
         try self.ux.renderFinalize();
     }
-
-    // pub fn renderChrome(self: *Coordinator, list: *std.ArrayList(view.Renderable)) !void {
-    //     if (!self.isChromeActive()) return;
-    //     const c = self.chromeView();
-    //
-    //     try c.appendRenderables(self.alloc, self.vs, list);
-    // }
 };
