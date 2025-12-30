@@ -12,6 +12,72 @@ const Renderable = view.Renderable;
 const ViewState = view.ViewState;
 const InputResult = view.InputResult;
 const Command = infra.commands.Command;
+const Rect = s.rect.FRect;
+const AssetId = view.AssetId;
+const Color = s.pixels.Color;
+
+const Button = struct {
+    rect: Rect,
+    color: Color,
+    asset_id: ?AssetId,
+    text: []const u8,
+};
+
+// FIXME: set reference dimensions in view.zig
+
+pub const logical_h = 1920;
+pub const logical_w = 1080;
+
+pub const header_h = 100;
+pub const footer_h = 100;
+pub const sidebar_w = 700;
+
+pub const origin = s.rect.FPoint{ .x = 0, .y = header_h };
+pub const viewport = Rect{
+    .x = origin.x,
+    .y = origin.y,
+    .w = logical_w - sidebar_w,
+    .h = logical_h - header_h - footer_h,
+};
+
+const MenuBar = struct {
+    fn render() []const Renderable {
+        return &[_]Renderable{
+            // top
+            .{ .filled_rect = .{
+                .rect = .{
+                    .x = 0,
+                    .y = 0,
+                    .w = logical_w,
+                    .h = header_h,
+                },
+                .color = Color{ .r = 30, .g = 30, .b = 30 },
+            } },
+            // RHS
+            .{ .filled_rect = .{
+                .rect = .{
+                    .x = logical_w - sidebar_w,
+                    .y = header_h,
+                    .w = sidebar_w,
+                    .h = logical_h - header_h - footer_h,
+                },
+                .color = Color{ .r = 30, .g = 30, .b = 30 },
+            } },
+
+            // footer
+            .{ .filled_rect = .{
+                .rect = .{
+                    .x = 0,
+                    .y = 1080 - footer_h,
+                    .w = 1920,
+                    .h = footer_h,
+                },
+                .color = Color{ .r = 30, .g = 30, .b = 30 },
+            } },
+            // footer
+        };
+    }
+};
 
 pub const ChromeView = struct {
     world: *const World,
@@ -32,8 +98,6 @@ pub const ChromeView = struct {
         //
         _ = .{ self, alloc, vs, list };
 
-        for (0..0) |_| {
-            list.append(alloc, .{});
-        }
+        try list.appendSlice(alloc, MenuBar.render());
     }
 };

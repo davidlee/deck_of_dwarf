@@ -165,7 +165,6 @@ const CardZoneView = struct {
     }
 };
 
-const MenuBar = struct {};
 
 const PlayerAvatar = struct {
     rect: Rect,
