@@ -15,6 +15,38 @@ const tagline_text = "When life gives you goblins, make goblinade.";
 // Asset registry - indexed by AssetId
 const AssetCount = @typeInfo(AssetId).@"enum".fields.len;
 
+// const ReferenceResolution = struct {
+//     w: u32,
+//     h: u32,
+//     name: []const u8,
+// };
+//
+// const resolutions = [_]ReferenceResolution{
+//     .{ .w = 1280, .h = 720, .name = "720p" },
+//     .{ .w = 1920, .h = 1080, .name = "1080p" },
+//     .{ .w = 2560, .h = 1440, .name = "1440p" },
+// };
+//
+// const Layout = struct {
+//     // Computed from logical size
+//     screen: Rect,
+//
+//     // Major regions
+//     sidebar: Rect,
+//     main_area: Rect,
+//     top_bar: Rect,
+//
+//     fn compute(logical_w: f32, logical_h: f32) Layout {
+//         const sidebar_w = 250;
+//         return .{
+//             .screen = .{ .x = 0, .y = 0, .w = logical_w, .h = logical_h },
+//             .sidebar = .{ .x = logical_w - sidebar_w, .y = 0, .w = sidebar_w, .h = logical_h },
+//             .main_area = .{ .x = 0, .y = 40, .w = logical_w - sidebar_w, .h = logical_h - 40 },
+//             .top_bar = .{ .x = 0, .y = 0, .w = logical_w, .h = 40 },
+//         };
+//     }
+// };
+
 pub const UX = struct {
     alloc: std.mem.Allocator,
     renderer: s.render.Renderer,
@@ -68,12 +100,7 @@ pub const UX = struct {
         assets[@intFromEnum(AssetId.splash_background)] = splash_bg;
 
         // Set logical presentation based on splash background size
-        const img_w, const img_h = try splash_bg.getSize();
-        try renderer.setLogicalPresentation(
-            @intFromFloat(img_w),
-            @intFromFloat(img_h),
-            .letter_box,
-        );
+        try renderer.setLogicalPresentation(config.logical_width, config.logical_height, .letter_box);
 
         try loadSprites(&assets, renderer);
 
@@ -120,11 +147,18 @@ pub const UX = struct {
         return self.renderer.renderCoordinatesFromWindowCoordinates(screen) catch screen;
     }
 
+    /// MAIN RENDER LOOP
+    ///
     /// Render a list of renderables
     pub fn renderView(self: *UX, renderables: []const Renderable) !void {
+        // clear
         try self.renderer.setDrawColor(s.pixels.Color{ .r = 0, .g = 0, .b = 0 });
         try self.renderer.clear();
 
+        // layer 0: background
+        //
+
+        // layer 1: game content
         for (renderables) |r| {
             switch (r) {
                 .sprite => |sprite| try self.renderSprite(sprite),
@@ -136,7 +170,23 @@ pub const UX = struct {
             }
         }
 
+        // layer 2: UI chrome
+        // self.renderUI( ... )
+
+        // layer 3: overlays (tooltips, etc)
+        //
+
+        // layer 4: debug border, etc
+        try self.renderDebug();
+
         try self.renderer.present();
+    }
+
+    fn renderDebug(self: *UX) !void {
+        try self.renderer.setDrawColor(s.pixels.Color{ .r = 80, .g = 70, .b = 30 });
+        const w, const h, _ = try self.renderer.getLogicalPresentation();
+        const border = s.rect.FRect{ .x = 0, .y = 0, .w = @floatFromInt(w), .h = @floatFromInt(h) };
+        try self.renderer.renderRect(border);
     }
 
     fn renderCard(self: *UX, card: view.Card) !void {

@@ -18,6 +18,7 @@ const view_state = @import("view_state.zig");
 const splash = @import("views/splash.zig");
 const combat = @import("views/combat.zig");
 const summary = @import("views/summary.zig");
+const chrome = @import("views/chrome.zig");
 
 const EffectSystem = effects.EffectSystem;
 const EffectMapper = effects.EffectMapper;
@@ -67,6 +68,18 @@ pub const Coordinator = struct {
         };
     }
 
+    fn isChromeActive(self: *Coordinator) bool {
+        return switch (self.world.fsm.currentState()) {
+            .splash => false,
+            // .menu => false,
+            else => true,
+        };
+    }
+
+    fn chromeView(self: *Coordinator) chrome.ChromeView {
+        return chrome.ChromeView.init(self.world);
+    }
+
     // Handle SDL input event
     pub fn handleInput(self: *Coordinator, sdl_event: s.events.Event) ?Command {
         // Update mouse position on any mouse event
@@ -87,12 +100,20 @@ pub const Coordinator = struct {
         var v = self.activeView();
         const result = v.handleInput(sdl_event, self.world, self.vs);
 
-        // Apply view state update if returned
-        if (result.vs) |new_vs| {
-            self.vs = new_vs;
-        }
+        if (result.vs) |new_vs| self.vs = new_vs;
 
-        return result.command;
+        // chrome can apply viewstate updates as well, but only issues a command
+        // if one wasn't already issued by the active view
+        //
+        if (self.isChromeActive()) {
+            var c = self.chromeView();
+            const ui_result = c.handleInput(sdl_event, self.world, self.vs);
+            if (ui_result.vs) |new_vs| self.vs = new_vs;
+
+            return result.command orelse ui_result.command;
+        } else {
+            return result.command;
+        }
     }
 
     // Handle SDL non-input event
@@ -129,11 +150,23 @@ pub const Coordinator = struct {
     // Render current state
     pub fn render(self: *Coordinator) !void {
         var v = self.activeView();
+        // LAYER 1: Game / Active View
         var renderables = try v.renderables(self.alloc, self.vs);
         defer renderables.deinit(self.alloc);
 
+        // LAYER 2: Chrome
+        try self.renderChrome(&renderables);
+
+        // LAYER 3: Effects
         // TODO: also gather effect renderables and append
 
         try self.ux.renderView(renderables.items);
+    }
+
+    pub fn renderChrome(self: *Coordinator, list: *std.ArrayList(view.Renderable)) !void {
+        if (!self.isChromeActive()) return;
+        const c = self.chromeView();
+
+        try c.appendRenderables(self.alloc, self.vs, list);
     }
 };

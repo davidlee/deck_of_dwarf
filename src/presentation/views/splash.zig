@@ -43,13 +43,14 @@ pub const TitleScreenView = struct {
         // Background image (null dst = native size at origin)
         try list.append(alloc, .{ .sprite = .{
             .asset = AssetId.splash_background,
+            .dst = .{ .x = 0, .y = 0, .w = 1920, .h = 1080 },
         } });
 
         // Tagline
         try list.append(alloc, .{
             .sprite = .{
                 .asset = AssetId.splash_tagline,
-                .dst = .{ .x = 160, .y = 420, .w = 0, .h = 0 }, // w/h ignored when 0
+                .dst = .{ .x = 720, .y = 680, .w = 0, .h = 0 }, // w/h ignored when 0
             },
         });
 
