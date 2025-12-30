@@ -6,7 +6,8 @@
 const std = @import("std");
 const view = @import("view.zig");
 const infra = @import("infra");
-const World = @import("../../domain/world.zig").World;
+const w = @import("../../domain/world.zig");
+const World = w.World;
 const cards = @import("../../domain/cards.zig");
 const deck = @import("../../domain/deck.zig");
 const combat = @import("../../domain/combat.zig");
@@ -77,11 +78,51 @@ fn getLayout(zone: cards.Zone) CardLayout {
     unreachable;
 }
 
+const EndTurnButton = struct {
+    rect: Rect,
+    active: bool,
+    asset_id: AssetId,
+
+    fn init(game_state: w.GameState) EndTurnButton {
+        return EndTurnButton{
+            .active = (game_state == .player_card_selection),
+            .asset_id = AssetId.end_turn,
+            .rect = Rect{
+                .x = 50,
+                .y = 550,
+                .w = 120,
+                .h = 40,
+            },
+        };
+    }
+
+    fn hitTest(self: *EndTurnButton, vs: ViewState) bool {
+        if (self.active) {
+            if (self.rect.pointIn(vs.mouse)) return true;
+        }
+        return false;
+    }
+
+    fn renderable(self: *const EndTurnButton) ?Renderable {
+        if (self.active) {
+            return Renderable{ .sprite = .{
+                .asset = self.asset_id,
+                .dst = self.rect,
+            } };
+        } else return null;
+    }
+};
+
 pub const CombatView = struct {
     world: *const World,
+    end_turn_btn: EndTurnButton,
 
     pub fn init(world: *const World) CombatView {
-        return .{ .world = world };
+        var fsm = world.fsm;
+        return .{
+            .world = world,
+            .end_turn_btn = EndTurnButton.init(fsm.currentState()),
+        };
     }
 
     // Query methods - expose what the view needs from World
@@ -180,6 +221,8 @@ pub const CombatView = struct {
         if (self.hitTestEnemies(vs.mouse)) |target_id| {
             std.debug.print("ENEMY HIT: id={d}:{d}\n", .{ target_id.index, target_id.generation });
             return .{ .command = .{ .select_target = .{ .target_id = target_id } } };
+        } else if (self.end_turn_btn.hitTest(vs)) {
+            return .{ .command = .{ .end_turn = {} } };
         }
 
         // std.debug.print("CLICK MISS at ({d:.0}, {d:.0})\n", .{ pos.x, pos.y });
@@ -396,21 +439,24 @@ pub const CombatView = struct {
         if (last != null)
             try list.append(alloc, last.?);
 
-        // END TURN button
-        var fsm = self.world.fsm;
-        if (fsm.currentState() == .player_card_selection) {
-            try list.append(alloc, .{
-                .sprite = .{
-                    .asset = AssetId.end_turn,
-                    .dst = .{
-                        .x = 50,
-                        .y = 550,
-                        .w = 289,
-                        .h = 97,
-                    },
-                },
-            });
+        if (self.end_turn_btn.renderable()) |btn| {
+            try list.append(alloc, btn);
         }
+        // // END TURN button
+        // var fsm = self.world.fsm;
+        // if (fsm.currentState() == .player_card_selection) {
+        //     try list.append(alloc, .{
+        //         .sprite = .{
+        //             .asset = AssetId.end_turn,
+        //             .dst = .{
+        //                 .x = 50,
+        //                 .y = 550,
+        //                 .w = 289,
+        //                 .h = 97,
+        //             },
+        //         },
+        //     });
+        // }
 
         // TODO: enemies (top area)
         // TODO: engagement info / advantage bars

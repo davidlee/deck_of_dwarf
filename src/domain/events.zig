@@ -46,6 +46,7 @@ pub const Event = union(enum) {
         // TODO instances -> [exhausted?]
     },
 
+    // wound events
     wound_inflicted: struct {
         agent_id: entity.ID,
         wound: body.Wound,

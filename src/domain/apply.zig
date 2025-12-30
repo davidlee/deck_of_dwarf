@@ -143,6 +143,9 @@ pub const EventProcessor = struct {
     }
 };
 
+//
+// HANDLER
+//
 pub const CommandHandler = struct {
     world: *World,
 
@@ -166,6 +169,9 @@ pub const CommandHandler = struct {
             },
             .cancel_card => |id| {
                 try self.cancelActionCard(id);
+            },
+            .end_turn => {
+                try self.world.transitionTo(.tick_resolution);
             },
             else => {
                 std.debug.print("UNHANDLED COMMAND: -- {any}", .{cmd});
