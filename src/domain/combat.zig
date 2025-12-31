@@ -19,8 +19,11 @@ const Event = e.Event;
 const SlotMap = @import("slot_map.zig").SlotMap;
 const Instance = cards.Instance;
 const Template = cards.Template;
-const Director = ai.Director;
 
+pub const Director = union(enum) {
+    player,
+    ai: ai.Director,
+};
 pub const Reach = enum {
     // Engagement distances (closer = lower)
     clinch,

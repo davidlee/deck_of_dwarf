@@ -27,7 +27,7 @@ const Expression = cards.Expression;
 const Technique = cards.Technique;
 
 // AI strategy "interface"
-pub const AIDirector = struct {
+pub const Director = struct {
     ptr: *anyopaque,
     // agent: *Agent,
     // player: *Agent,
@@ -35,7 +35,7 @@ pub const AIDirector = struct {
     playCardsFn: *const fn (ptr: *anyopaque, agent: *Agent, player: *Agent, events: *EventSystem) anyerror!void,
 
     // delegate to the supplied function
-    pub fn playCards(self: *AIDirector, agent: *Agent, player: *Agent, events: *EventSystem) !void {
+    pub fn playCards(self: *Director, agent: *Agent, player: *Agent, events: *EventSystem) !void {
         return self.playCardsFn(self.ptr, agent, player, events);
     }
 };
@@ -44,9 +44,14 @@ const AIError = error{
     InvalidResourceType,
 };
 
+pub fn simple() Director {
+    var impl = SimpleDeckAIDirector{};
+    return impl.director();
+}
+
 pub const SimpleDeckAIDirector = struct {
-    pub fn director(self: *SimpleDeckAIDirector) AIDirector {
-        return AIDirector{
+    pub fn director(self: *SimpleDeckAIDirector) Director {
+        return Director{
             .ptr = self,
             .playCardsFn = playCards,
         };
@@ -83,9 +88,4 @@ pub const SimpleDeckAIDirector = struct {
             }
         }
     }
-};
-
-pub const Director = union(enum) {
-    player,
-    ai: AIDirector,
 };

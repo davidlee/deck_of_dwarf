@@ -10,6 +10,7 @@ const entity = lib.entity;
 const events = @import("events.zig");
 const world = @import("world.zig");
 const stats = @import("stats.zig");
+const ai = @import("ai.zig");
 
 const Agent = combat.Agent;
 const Engagement = combat.Engagement;
