@@ -7,7 +7,7 @@ const cards = @import("cards.zig");
 const card_list = @import("card_list.zig");
 const combat = @import("combat.zig");
 const events = @import("events.zig");
-const world = @import("world.zig");
+const w = @import("world.zig");
 const random = @import("random.zig");
 const entity = lib.entity;
 const tick = @import("tick.zig");
@@ -15,7 +15,7 @@ const tick = @import("tick.zig");
 const Event = events.Event;
 const EventSystem = events.EventSystem;
 const EventTag = std.meta.Tag(Event);
-const World = world.World;
+const World = w.World;
 const Agent = combat.Agent;
 const Rule = cards.Rule;
 const TagSet = cards.TagSet;
@@ -24,14 +24,25 @@ const Trigger = cards.Trigger;
 const Effect = cards.Effect;
 const Expression = cards.Expression;
 const Technique = cards.Technique;
+const Instance = cards.Instance;
 
 const log = std.debug.print;
+
+pub const ValidationError = error{
+    InsufficientStamina,
+    InsufficientTime,
+    InvalidGameState,
+    CardNotInHand,
+    PredicateFailed,
+    NotImplemented,
+};
 
 pub const CommandError = error{
     CommandInvalid,
     InsufficientStamina,
     InsufficientTime,
     InvalidGameState,
+    BadInvariant,
     CardNotInHand,
     PredicateFailed,
     NotImplemented,
@@ -42,10 +53,10 @@ pub const EventSystemError = error{
 };
 
 const EffectContext = struct {
-    card: *cards.Instance,
-    effect: *const cards.Effect,
-    target: *std.ArrayList(*combat.Agent), // TODO: will need to be polymorphic (player, body part)
-    actor: *combat.Agent,
+    card: *Instance,
+    effect: *const Effect,
+    target: *std.ArrayList(*Agent), // TODO: will need to be polymorphic (player, body part)
+    actor: *Agent,
     technique: ?TechniqueContext = null,
 
     fn applyModifiers(self: *EffectContext, alloc: std.mem.Allocator) void {
@@ -76,7 +87,7 @@ const EffectContext = struct {
 };
 
 const TechniqueContext = struct {
-    technique: *const cards.Technique,
+    technique: *const Technique,
     base_damage: *const damage.Base,
     calc_damage: ?[]damage.Instance = null,
     calc_difficulty: ?f32 = null,
@@ -92,9 +103,9 @@ pub const CommandHandler = struct {
         try self.world.events.push(event);
     }
 
-    pub fn init(ctx: *World) CommandHandler {
+    pub fn init(world: *World) CommandHandler {
         return CommandHandler{
-            .world = ctx,
+            .world = world,
         };
     }
 
@@ -119,8 +130,6 @@ pub const CommandHandler = struct {
         }
     }
 
-    // TODO: consider moving this logic (helpers for player commands) to player.zig
-    //
     pub fn cancelActionCard(self: *CommandHandler, id: entity.ID) !void {
         const player = self.world.player;
         const game_state = self.world.fsm.currentState();
@@ -160,59 +169,18 @@ pub const CommandHandler = struct {
         const game_state = self.world.fsm.currentState();
         const pd = switch (player.cards) {
             .deck => |*d| d,
-            .pool => return CommandError.InvalidGameState,
+            .pool => return CommandError.BadInvariant,
         };
+        const card = try pd.find(id, .hand);
 
-        // check if it's valid to play
-        // first, game and template requirements
         if (game_state != .player_card_selection)
             return CommandError.InvalidGameState;
 
-        const card = try self.world.player.cards.deck.find(id, .hand);
-
-        if (player.stamina_available < card.template.cost.stamina)
-            return CommandError.InsufficientStamina;
-
-        if (player.time_available < card.template.cost.time)
-            return CommandError.InsufficientTime;
-
-        if (!pd.instanceInZone(card.id, .hand)) return CommandError.CardNotInHand;
-
-        // WARN: for now we assume the trigger is fine (caller's responsibility)
-
-        // check rule.valid predicates (weapon requirements, etc.)
-        if (!canUseCard(card.template, player))
-            return CommandError.PredicateFailed;
-
-        // lock it in: move the card
-        try pd.move(card.id, .hand, .in_play);
-        try self.sink(
-            Event{
-                .card_moved = .{ .instance = card.id, .from = .hand, .to = .in_play },
-            },
-        );
-
-        // sink an event for the card being played
-        try self.sink(
-            Event{
-                .played_action_card = .{
-                    .instance = card.id,
-                    .template = card.template.id,
-                },
-            },
-        );
-
-        // put a hold on the time & stamina costs for the UI to display / player state
-        player.stamina_available -= card.template.cost.stamina;
-        player.time_available -= card.template.cost.time;
-        try self.sink(
-            Event{
-                .card_cost_reserved = .{
-                    .stamina = card.template.cost.stamina,
-                    .time = card.template.cost.time,
-                },
-            },
-        );
+        if (try validateCardSelection(player, card)) {
+            try playValidCardReservingCosts(&self.world.events, player, card);
+        } else {
+            return CommandError.CommandInvalid;
+        }
     }
 };
 
@@ -221,9 +189,9 @@ pub const CommandHandler = struct {
 //
 pub const EventProcessor = struct {
     world: *World,
-    pub fn init(ctx: *World) EventProcessor {
+    pub fn init(world: *World) EventProcessor {
         return EventProcessor{
-            .world = ctx,
+            .world = world,
         };
     }
 
@@ -235,7 +203,7 @@ pub const EventProcessor = struct {
         try self.shuffleAndDraw(self.world.player, count);
     }
 
-    /// Shuffle draw pile and draw cards to hand
+    /// Shuffle draw pile and draw cards to hands - everyone with a deck
     fn shuffleAndDraw(self: *EventProcessor, agent: *Agent, count: usize) !void {
         var pd = switch (agent.cards) {
             .deck => |*d| d,
@@ -314,6 +282,70 @@ pub const EventProcessor = struct {
         } else return false;
     }
 };
+
+// ============================================================================
+// High level interfaces - validate moves & play cards
+// ============================================================================
+
+/// is it valid to play?
+pub fn isCardSelectionValid(actor: *Agent, card: *Instance) bool {
+    return validateCardSelection(actor, card) catch false;
+}
+
+/// Check if its rules are valid AND actor can afford the cost
+///
+/// NOTE - does not validate game state, effect triggers, etc
+pub fn validateCardSelection(actor: *Agent, card: *Instance) !bool {
+    const deck = &actor.cards.deck;
+    const template = card.template;
+
+    if (actor.stamina_available < template.cost.stamina) return ValidationError.InsufficientStamina;
+
+    if (actor.time_available < template.cost.time) return ValidationError.InsufficientTime;
+
+    if (!deck.instanceInZone(card.id, .hand)) return ValidationError.CardNotInHand;
+
+    // check rule.valid predicates (weapon requirements, etc.)
+    if (!canUseCard(template, actor)) return ValidationError.PredicateFailed;
+
+    return true;
+}
+
+/// Doesn't perform validation. Just moves card, reserves costs, emits events.
+pub fn playValidCardReservingCosts(evs: *EventSystem, actor: *Agent, card: *Instance) !void {
+    const deck = &actor.cards.deck;
+
+    try deck.move(card.id, .hand, .in_play);
+    try evs.push(
+        Event{
+            .card_moved = .{ .instance = card.id, .from = .hand, .to = .in_play },
+        },
+    );
+
+    // sink an event for the card being played
+    try evs.push(
+        Event{
+            .played_action_card = .{
+                .instance = card.id,
+                .template = card.template.id,
+            },
+        },
+    );
+
+    // put a hold on the time & stamina costs for the UI to display / player state
+    actor.stamina_available -= card.template.cost.stamina;
+    actor.time_available -= card.template.cost.time;
+
+    try evs.push(
+        Event{
+            .card_cost_reserved = .{
+                .stamina = card.template.cost.stamina,
+                .time = card.template.cost.time,
+            },
+        },
+    );
+}
+
 // ============================================================================
 // Card Validity (rule.valid predicates - can this card be used by this actor?)
 // ============================================================================
@@ -450,12 +482,12 @@ pub fn cardHasValidTargets(
     template: *const cards.Template,
     card: *const cards.Instance,
     actor: *const Agent,
-    w: *const World,
+    world: *const World,
 ) bool {
     for (template.rules) |rule| {
         for (rule.expressions) |expr| {
             // Get potential targets
-            const targets = getTargetsForQuery(expr.target, actor, w);
+            const targets = getTargetsForQuery(expr.target, actor, world);
             for (targets) |target| {
                 const engagement = getEngagementBetween(actor, target);
                 if (expressionAppliesToTarget(&expr, card, actor, target, engagement)) {
@@ -468,16 +500,16 @@ pub fn cardHasValidTargets(
 }
 
 // Helper to get targets without allocation (returns slice into world data)
-fn getTargetsForQuery(query: cards.TargetQuery, actor: *const Agent, w: *const World) []const *Agent {
+fn getTargetsForQuery(query: cards.TargetQuery, actor: *const Agent, world: *const World) []const *Agent {
     return switch (query) {
         .self => @as([*]const *Agent, @ptrCast(&actor))[0..1],
         .all_enemies => blk: {
             if (actor.director == .player) {
-                if (w.encounter) |*enc| {
+                if (world.encounter) |*enc| {
                     break :blk enc.enemies.items;
                 }
             } else {
-                break :blk @as([*]const *Agent, @ptrCast(&w.player))[0..1];
+                break :blk @as([*]const *Agent, @ptrCast(&world.player))[0..1];
             }
             break :blk &.{};
         },
@@ -506,7 +538,7 @@ pub fn evaluateTargets(
     alloc: std.mem.Allocator,
     query: cards.TargetQuery,
     actor: *Agent,
-    w: *World,
+    world: *World,
 ) !std.ArrayList(*Agent) {
     var targets = try std.ArrayList(*Agent).initCapacity(alloc, 4);
     errdefer targets.deinit(alloc);
@@ -518,19 +550,19 @@ pub fn evaluateTargets(
         .all_enemies => {
             if (actor.director == .player) {
                 // Player targets all mobs
-                if (w.encounter) |*enc| {
+                if (world.encounter) |*enc| {
                     for (enc.enemies.items) |enemy| {
                         try targets.append(alloc, enemy);
                     }
                 }
             } else {
                 // AI targets player
-                try targets.append(alloc, w.player);
+                try targets.append(alloc, world.player);
             }
         },
         .single => |selector| {
             // Look up by entity ID
-            if (w.entities.agents.get(selector.id)) |agent| {
+            if (world.entities.agents.get(selector.id)) |agent| {
                 try targets.append(alloc, agent.*);
             }
         },

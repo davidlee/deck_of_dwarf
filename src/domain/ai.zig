@@ -80,33 +80,19 @@ pub const SimpleDeckDirector = struct {
         };
     }
 
+    // TODO: ensure events differentiate player and mob actions
     pub fn playCards(ptr: *anyopaque, agent: *Agent, player: *Agent, events: *EventSystem) !void {
         const self: *SimpleDeckDirector = @ptrCast(@alignCast(ptr));
         _ = .{ player, self };
 
-        // check invariant: agent has a deck
-        // switch (agent.cards) {
-        //     .deck => {},
-        //     else => return AIError.InvalidResourceType,
-        // }
-        var dk = &agent.cards.deck;
-
+        const dk = &agent.cards.deck;
         var to_play: usize = 3;
         var hand_index: usize = 0;
-
         while (to_play > 0 and hand_index < dk.hand.items.len) : (hand_index += 1) {
             const card = dk.hand.items[hand_index];
-
-            // TODO: ENSURE STAMINA COSTS ETC ARE CHECKED
-
-            if (apply.canUseCard(card.template, agent)) {
-                try dk.move(card.id, .hand, .in_play);
-
-                // TODO: ensure events differentiate player and mob actions
-                // TODO: ensure costs are deducted
-
+            if (apply.isCardSelectionValid(agent, card)) {
+                try apply.playValidCardReservingCosts(events, agent, card);
                 try events.push(e.Event{ .played_action_card = .{ .instance = card.id, .template = card.template.id } });
-                // TODO Sink event
                 to_play -= 1;
             }
         }
