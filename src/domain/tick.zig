@@ -351,6 +351,7 @@ pub const TickResolver = struct {
 // Tests
 // ============================================================================
 
+const ai = @import("ai.zig");
 test "CommittedAction.compareByTime sorts correctly" {
     const alloc = std.testing.allocator;
 
@@ -489,7 +490,7 @@ test "commitSingleMob fills tick with multiple pool techniques" {
     mob.* = .{
         .id = undefined,
         .alloc = alloc,
-        .director = .ai,
+        .director = ai.noop(),
         .cards = .{ .pool = pool },
         .stats = stats.Block.splat(5),
         .body = test_body,
@@ -563,7 +564,7 @@ test "commitSingleMob stops when stamina exhausted" {
     mob.* = .{
         .id = undefined,
         .alloc = alloc,
-        .director = .ai,
+        .director = ai.noop(),
         .cards = .{ .pool = pool },
         .stats = stats.Block.splat(5),
         .body = test_body,

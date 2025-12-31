@@ -26,7 +26,23 @@ const Effect = cards.Effect;
 const Expression = cards.Expression;
 const Technique = cards.Technique;
 
-// AI strategy "interface"
+// convenience constructors for Agent
+
+pub fn simple() combat.Director {
+    var impl = SimpleDeckDirector{};
+    return .{ .ai = impl.director() };
+}
+
+pub fn noop() combat.Director {
+    var impl = NullDirector{};
+    return .{ .ai = impl.director() };
+}
+
+const AIError = error{
+    InvalidResourceType,
+};
+
+/// AI strategy "interface"
 pub const Director = struct {
     ptr: *anyopaque,
     // agent: *Agent,
@@ -40,17 +56,9 @@ pub const Director = struct {
     }
 };
 
-const AIError = error{
-    InvalidResourceType,
-};
-
-pub fn simple() Director {
-    var impl = SimpleDeckAIDirector{};
-    return impl.director();
-}
-
-pub const SimpleDeckAIDirector = struct {
-    pub fn director(self: *SimpleDeckAIDirector) Director {
+/// does nothing. maybe useful for tests.
+pub const NullDirector = struct {
+    pub fn director(self: *NullDirector) Director {
         return Director{
             .ptr = self,
             .playCardsFn = playCards,
@@ -58,7 +66,22 @@ pub const SimpleDeckAIDirector = struct {
     }
 
     pub fn playCards(ptr: *anyopaque, agent: *Agent, player: *Agent, events: *EventSystem) !void {
-        const self: *SimpleDeckAIDirector = @ptrCast(@alignCast(ptr));
+        _ = .{ ptr, agent, player, events };
+    }
+};
+
+/// Just spams the first playable card whenever it can
+/// requires a deck
+pub const SimpleDeckDirector = struct {
+    pub fn director(self: *SimpleDeckDirector) Director {
+        return Director{
+            .ptr = self,
+            .playCardsFn = playCards,
+        };
+    }
+
+    pub fn playCards(ptr: *anyopaque, agent: *Agent, player: *Agent, events: *EventSystem) !void {
+        const self: *SimpleDeckDirector = @ptrCast(@alignCast(ptr));
         _ = .{ player, self };
 
         // check invariant: agent has a deck

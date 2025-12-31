@@ -612,6 +612,7 @@ pub fn applyCommittedCosts(
 const testing = std.testing;
 const weapon_list = @import("weapon_list.zig");
 const weapon = @import("weapon.zig");
+const ai = @import("ai.zig");
 
 fn testId(index: u32) entity.ID {
     return .{ .index = index, .generation = 0 };
@@ -621,7 +622,7 @@ fn makeTestAgent(armament: combat.Armament) Agent {
     return Agent{
         .id = testId(99),
         .alloc = undefined, // not used by canUseCard
-        .director = .ai,
+        .director = ai.noop(),
         .cards = .{ .pool = undefined }, // not used by canUseCard
         .stats = undefined, // not used by canUseCard
         .engagement = null,

@@ -35,7 +35,7 @@ pub fn setupEncounter(world: *World) !void {
     const mob = try combat.Agent.init(
         world.alloc,
         world.entities.agents,
-        .{ .ai = ai.simple() },
+        ai.simple(),
         combat.Strat{ .deck = mobdeck },
         stats.Block.splat(6),
         try body.Body.fromPlan(world.alloc, &body.HumanoidPlan),

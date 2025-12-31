@@ -686,7 +686,7 @@ test "resolveTechniqueVsDefense emits technique_resolved event" {
 
     // Create attacker (player) and defender (mob)
     const attacker = w.player;
-    const defender = try makeTestAgent(alloc, w.entities.agents, .ai);
+    const defender = try makeTestAgent(alloc, w.entities.agents, ai.noop());
     defer defender.deinit();
 
     // Set up engagement on defender
@@ -747,7 +747,7 @@ test "resolveTechniqueVsDefense emits advantage_changed events on hit" {
     w.attachEventHandlers();
 
     const attacker = w.player;
-    const defender = try makeTestAgent(alloc, w.entities.agents, .ai);
+    const defender = try makeTestAgent(alloc, w.entities.agents, ai.noop());
     defer defender.deinit();
 
     defender.engagement = Engagement{};
@@ -815,7 +815,7 @@ test "resolveTechniqueVsDefense applies damage on hit" {
     w.attachEventHandlers();
 
     const attacker = w.player;
-    const defender = try makeTestAgent(alloc, w.entities.agents, .ai);
+    const defender = try makeTestAgent(alloc, w.entities.agents, ai.noop());
     defer defender.deinit();
 
     defender.engagement = Engagement{};
@@ -879,7 +879,7 @@ test "AdvantageEffect.apply modifies engagement and balance" {
     var attacker = try makeTestAgent(alloc, agents, .player);
     defer attacker.deinit();
 
-    var defender = try makeTestAgent(alloc, agents, .ai);
+    var defender = try makeTestAgent(alloc, agents, ai.noop());
     defer defender.deinit();
 
     attacker.balance = 1.0;
