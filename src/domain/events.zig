@@ -54,6 +54,10 @@ pub const Event = union(enum) {
     },
 
     // TODO update agent refs for the rest
+    // what is worth recording out of:
+    // -- who's affected (AgentMeta) - yes
+    // -- who caused it - maybe
+    // -- what [kind of] card / effect caused it? - maybe
 
     // wound events
     wound_inflicted: struct {
@@ -102,6 +106,7 @@ pub const Event = union(enum) {
         technique_id: cards.TechniqueID,
         outcome: resolution.Outcome,
     },
+
     advantage_changed: struct {
         agent_id: entity.ID,
         engagement_with: ?entity.ID, // null for intrinsic (balance)
@@ -128,6 +133,7 @@ pub const Event = union(enum) {
         volume: f32,
     },
     player_turn_ended: void, // Payload: none
+    player_committed: void, // Payload: none
     tick_ended: void, // tick resolution completed
 
     // Tick cleanup events (for observability)

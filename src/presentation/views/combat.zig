@@ -72,7 +72,7 @@ const EndTurnButton = struct {
 
     fn init(game_state: w.GameState) EndTurnButton {
         return EndTurnButton{
-            .active = (game_state == .player_card_selection),
+            .active = (game_state == .player_card_selection or game_state == .commit_phase),
             .asset_id = AssetId.end_turn,
             .rect = Rect{
                 .x = 50,
@@ -319,20 +319,23 @@ pub const CombatView = struct {
                 if (cs.drag) |_| {
                     return .{};
                 } else {
-                    // check for hover
+                    // check for hover on hand cards
                     if (self.handZone().hitTest(vs)) |x| {
                         var new_cs = cs;
                         new_cs.hover = .{ .card = x };
                         return .{ .vs = vs.withCombat(new_cs) };
+                        // hover for player cards in play zone
                     } else if (self.inPlayZone().hitTest(vs)) |x| {
                         var new_cs = cs;
                         new_cs.hover = .{ .card = x };
                         return .{ .vs = vs.withCombat(new_cs) };
+                        // hover for enemies
                     } else if (self.opposition.hitTest(vs)) |sprite| {
                         const id = sprite.id;
                         var new_cs = cs;
                         new_cs.hover = .{ .enemy = id };
                         return .{ .vs = vs.withCombat(new_cs) };
+                        // reset hover state when no hit detected
                     } else if (cs.hover != .none) {
                         var new_cs = cs;
                         new_cs.hover = .none;
@@ -359,7 +362,11 @@ pub const CombatView = struct {
             // std.debug.print("ENEMY HIT: id={d}:{d}\n", .{ sprite.id.index, sprite.id.generation });
             return .{ .command = .{ .select_target = .{ .target_id = sprite.id } } };
         } else if (self.end_turn_btn.hitTest(vs)) {
-            return .{ .command = .{ .end_turn = {} } };
+            if (self.combat_phase == .player_card_selection) {
+                return .{ .command = .{ .end_turn = {} } };
+            } else if (self.combat_phase == .commit_phase) {
+                return .{ .command = .{ .commit_turn = {} } };
+            }
         }
         return .{};
     }
@@ -419,6 +426,7 @@ pub const CombatView = struct {
         try self.inPlayZone().appendRenderables(alloc, vs, &list, &last);
         try self.handZone().appendRenderables(alloc, vs, &list, &last);
 
+        // enemy cards
         if (self.combat_phase == .commit_phase) {
             try self.enemyInPlayZone().appendRenderables(alloc, vs, &list, &last);
         }
