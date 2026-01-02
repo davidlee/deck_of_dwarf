@@ -65,3 +65,4 @@ main.zig        Entry point (imports both)
 - **Adding visual feedback for an event?** Add Effect variant, map in EffectMapper.
 - **Need to track UI state (hover, selection)?** Add to ViewState, not World.
 
+Hey Claude: read `doc/zig.md` for recent API changes.

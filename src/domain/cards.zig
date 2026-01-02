@@ -66,16 +66,17 @@ pub const TagSet = packed struct {
     power: bool = false,
     skill: bool = false,
     meta: bool = false,
+    manoeuvre: bool = false,
 
     pub fn hasTag(self: *const TagSet, required: TagSet) bool {
-        const me: u12 = @bitCast(self.*);
-        const req: u12 = @bitCast(required);
+        const me: u13 = @bitCast(self.*);
+        const req: u13 = @bitCast(required);
         return (me & req) == req; // all required bits present
     }
 
     pub fn hasAnyTag(self: *const TagSet, mask: TagSet) bool {
-        const me: u12 = @bitCast(self.*);
-        const bm: u12 = @bitCast(mask);
+        const me: u13 = @bitCast(self.*);
+        const bm: u13 = @bitCast(mask);
         return (me & bm) != 0; // at least one bit matches
     }
 };

@@ -90,6 +90,94 @@ pub const Accessor = enum {
 
 pub const Template = Block;
 
+const testing = std.testing;
+
+test "Resource commit/finalize flow (stamina pattern)" {
+    // Stamina: commit on card selection, finalize at resolution
+    var stamina = Resource.init(10.0, 10.0, 2.0);
+
+    // Commit 3 stamina for a card
+    try testing.expect(stamina.commit(3.0));
+    try testing.expectEqual(@as(f32, 7.0), stamina.available);
+    try testing.expectEqual(@as(f32, 10.0), stamina.current); // not spent yet
+
+    // Commit another 4
+    try testing.expect(stamina.commit(4.0));
+    try testing.expectEqual(@as(f32, 3.0), stamina.available);
+
+    // Can't commit more than available
+    try testing.expect(!stamina.commit(5.0));
+    try testing.expectEqual(@as(f32, 3.0), stamina.available); // unchanged
+
+    // Finalize: current catches down to available
+    stamina.finalize();
+    try testing.expectEqual(@as(f32, 3.0), stamina.current);
+    try testing.expectEqual(@as(f32, 3.0), stamina.available);
+}
+
+test "Resource uncommit restores availability" {
+    var stamina = Resource.init(10.0, 10.0, 2.0);
+
+    _ = stamina.commit(6.0);
+    try testing.expectEqual(@as(f32, 4.0), stamina.available);
+
+    // Withdraw card, get stamina back
+    stamina.uncommit(6.0);
+    try testing.expectEqual(@as(f32, 10.0), stamina.available);
+
+    // Uncommit can't exceed current
+    stamina.uncommit(100.0);
+    try testing.expectEqual(@as(f32, 10.0), stamina.available);
+}
+
+test "Resource spend deducts immediately (focus pattern)" {
+    // Focus: spent immediately during commit phase
+    var focus = Resource.init(3.0, 5.0, 3.0);
+
+    try testing.expect(focus.spend(1.0));
+    try testing.expectEqual(@as(f32, 2.0), focus.current);
+    try testing.expectEqual(@as(f32, 2.0), focus.available);
+
+    // Can't spend more than available
+    try testing.expect(!focus.spend(3.0));
+    try testing.expectEqual(@as(f32, 2.0), focus.current); // unchanged
+}
+
+test "Resource tick refreshes capped at max" {
+    var res = Resource.init(5.0, 10.0, 3.0);
+
+    // Deplete it
+    _ = res.spend(4.0);
+    try testing.expectEqual(@as(f32, 1.0), res.current);
+
+    // Tick adds per_turn, syncs available
+    res.tick();
+    try testing.expectEqual(@as(f32, 4.0), res.current);
+    try testing.expectEqual(@as(f32, 4.0), res.available);
+
+    // Tick again
+    res.tick();
+    try testing.expectEqual(@as(f32, 7.0), res.current);
+
+    // Tick caps at max
+    res.tick();
+    res.tick();
+    try testing.expectEqual(@as(f32, 10.0), res.current);
+}
+
+test "Resource reset returns to default" {
+    var res = Resource.init(5.0, 10.0, 3.0);
+
+    // Modify state
+    _ = res.spend(3.0);
+    res.tick();
+
+    // Reset brings back to default
+    res.reset();
+    try testing.expectEqual(@as(f32, 5.0), res.current);
+    try testing.expectEqual(@as(f32, 5.0), res.available);
+}
+
 pub const Block = packed struct {
     // physical
     power: f32,

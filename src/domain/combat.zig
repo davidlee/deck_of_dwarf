@@ -174,6 +174,7 @@ pub const AgentPair = struct {
     b: entity.ID, // higher index
 
     pub fn canonical(x: entity.ID, y: entity.ID) AgentPair {
+        std.debug.assert(x.index != y.index); // self-engagement is invalid
         return if (x.index < y.index)
             .{ .a = x, .b = y }
         else
@@ -186,14 +187,19 @@ pub const Encounter = struct {
     enemies: std.ArrayList(*combat.Agent),
     player_id: entity.ID,
     engagements: std.AutoHashMap(AgentPair, Engagement),
+    agent_state: std.AutoHashMap(entity.ID, AgentEncounterState),
 
     pub fn init(alloc: std.mem.Allocator, player_id: entity.ID) !Encounter {
-        return Encounter{
+        var enc = Encounter{
             .alloc = alloc,
             .enemies = try std.ArrayList(*combat.Agent).initCapacity(alloc, 5),
             .player_id = player_id,
             .engagements = std.AutoHashMap(AgentPair, Engagement).init(alloc),
+            .agent_state = std.AutoHashMap(entity.ID, AgentEncounterState).init(alloc),
         };
+        // Initialize player's encounter state
+        try enc.agent_state.put(player_id, .{});
+        return enc;
     }
 
     pub fn deinit(self: *Encounter, agents: *SlotMap(*Agent)) void {
@@ -203,6 +209,7 @@ pub const Encounter = struct {
         }
         self.enemies.deinit(self.alloc);
         self.engagements.deinit();
+        self.agent_state.deinit();
     }
 
     /// Get engagement between two agents (order doesn't matter).
@@ -224,6 +231,12 @@ pub const Encounter = struct {
     pub fn addEnemy(self: *Encounter, enemy: *Agent) !void {
         try self.enemies.append(self.alloc, enemy);
         try self.setEngagement(self.player_id, enemy.id, Engagement{});
+        try self.agent_state.put(enemy.id, .{});
+    }
+
+    /// Get encounter state for an agent.
+    pub fn stateFor(self: *Encounter, agent_id: entity.ID) ?*AgentEncounterState {
+        return self.agent_state.getPtr(agent_id);
     }
 };
 // const ScriptedAction = struct {};
@@ -360,6 +373,131 @@ pub const Engagement = struct {
             .position = 1.0 - self.position,
             .range = self.range,
         };
+    }
+};
+
+// ============================================================================
+// Turn State
+// ============================================================================
+
+/// A card being played, with optional reinforcements and modifiers.
+pub const Play = struct {
+    pub const max_reinforcements = 4;
+
+    primary: entity.ID, // the lead card
+    reinforcements_buf: [max_reinforcements]entity.ID = undefined,
+    reinforcements_len: usize = 0,
+    stakes: cards.Stakes = .guarded,
+    added_in_commit: bool = false, // true if added via Focus, cannot be stacked
+
+    // Applied by modify_play effects during commit phase
+    cost_mult: f32 = 1.0,
+    damage_mult: f32 = 1.0,
+    advantage_override: ?TechniqueAdvantage = null,
+
+    pub fn reinforcements(self: *const Play) []const entity.ID {
+        return self.reinforcements_buf[0..self.reinforcements_len];
+    }
+
+    pub fn addReinforcement(self: *Play, card_id: entity.ID) error{Overflow}!void {
+        if (self.reinforcements_len >= max_reinforcements) return error.Overflow;
+        self.reinforcements_buf[self.reinforcements_len] = card_id;
+        self.reinforcements_len += 1;
+    }
+
+    pub fn cardCount(self: Play) usize {
+        return 1 + self.reinforcements_len;
+    }
+
+    pub fn canStack(self: Play) bool {
+        return !self.added_in_commit;
+    }
+
+    pub fn effectiveStakes(self: Play) cards.Stakes {
+        return switch (self.reinforcements_len) {
+            0 => self.stakes,
+            1 => .committed,
+            else => .reckless,
+        };
+    }
+
+    /// Get advantage profile (override if set, else from technique).
+    pub fn getAdvantage(self: Play, technique: *const cards.Technique) ?TechniqueAdvantage {
+        return self.advantage_override orelse technique.advantage;
+    }
+};
+
+/// Ephemeral state for the current turn - exists from commit through resolution.
+pub const TurnState = struct {
+    pub const max_plays = 8;
+
+    plays_buf: [max_plays]Play = undefined,
+    plays_len: usize = 0,
+    focus_spent: f32 = 0,
+
+    pub fn plays(self: *const TurnState) []const Play {
+        return self.plays_buf[0..self.plays_len];
+    }
+
+    pub fn playsMut(self: *TurnState) []Play {
+        return self.plays_buf[0..self.plays_len];
+    }
+
+    pub fn clear(self: *TurnState) void {
+        self.plays_len = 0;
+        self.focus_spent = 0;
+    }
+
+    pub fn addPlay(self: *TurnState, play: Play) error{Overflow}!void {
+        if (self.plays_len >= max_plays) return error.Overflow;
+        self.plays_buf[self.plays_len] = play;
+        self.plays_len += 1;
+    }
+};
+
+/// Ring buffer of recent turns for sequencing predicates.
+pub const TurnHistory = struct {
+    pub const max_history = 4;
+
+    recent_buf: [max_history]TurnState = undefined,
+    recent_len: usize = 0,
+
+    pub fn recent(self: *const TurnHistory) []const TurnState {
+        return self.recent_buf[0..self.recent_len];
+    }
+
+    pub fn push(self: *TurnHistory, turn: TurnState) void {
+        if (self.recent_len == max_history) {
+            // Shift out oldest
+            std.mem.copyForwards(TurnState, self.recent_buf[0 .. max_history - 1], self.recent_buf[1..max_history]);
+            self.recent_len -= 1;
+        }
+        self.recent_buf[self.recent_len] = turn;
+        self.recent_len += 1;
+    }
+
+    pub fn lastTurn(self: *const TurnHistory) ?*const TurnState {
+        return if (self.recent_len > 0)
+            &self.recent_buf[self.recent_len - 1]
+        else
+            null;
+    }
+
+    pub fn turnsAgo(self: *const TurnHistory, n: usize) ?*const TurnState {
+        if (n >= self.recent_len) return null;
+        return &self.recent_buf[self.recent_len - 1 - n];
+    }
+};
+
+/// Per-agent state within an encounter.
+pub const AgentEncounterState = struct {
+    current: TurnState = .{},
+    history: TurnHistory = .{},
+
+    /// End current turn: push to history and clear.
+    pub fn endTurn(self: *AgentEncounterState) void {
+        self.history.push(self.current);
+        self.current.clear();
     }
 };
 
@@ -627,4 +765,130 @@ test "ConditionIterator computed condition thresholds" {
     // Test control threshold: > 0.8 = weapon_bound
     try testing.expect(0.85 > 0.8); // would trigger weapon_bound
     try testing.expect(!(0.8 > 0.8)); // boundary: not triggered
+}
+
+test "Play.effectiveStakes escalates with reinforcements" {
+    var play = Play{ .primary = testId(1) };
+    try testing.expectEqual(cards.Stakes.guarded, play.effectiveStakes());
+
+    try play.addReinforcement(testId(2));
+    try testing.expectEqual(cards.Stakes.committed, play.effectiveStakes());
+
+    try play.addReinforcement(testId(3));
+    try testing.expectEqual(cards.Stakes.reckless, play.effectiveStakes());
+}
+
+test "Play.canStack false when added_in_commit" {
+    const normal_play = Play{ .primary = testId(1) };
+    try testing.expect(normal_play.canStack());
+
+    const commit_play = Play{ .primary = testId(2), .added_in_commit = true };
+    try testing.expect(!commit_play.canStack());
+}
+
+test "TurnState tracks plays and clears" {
+    var state = TurnState{};
+    try testing.expectEqual(@as(usize, 0), state.plays_len);
+
+    try state.addPlay(.{ .primary = testId(1) });
+    try state.addPlay(.{ .primary = testId(2) });
+    try testing.expectEqual(@as(usize, 2), state.plays_len);
+
+    state.clear();
+    try testing.expectEqual(@as(usize, 0), state.plays_len);
+    try testing.expectEqual(@as(f32, 0), state.focus_spent);
+}
+
+test "TurnHistory ring buffer evicts oldest" {
+    var history = TurnHistory{};
+
+    // Push 4 turns (fills buffer)
+    var turn1 = TurnState{};
+    turn1.focus_spent = 1.0;
+    history.push(turn1);
+
+    var turn2 = TurnState{};
+    turn2.focus_spent = 2.0;
+    history.push(turn2);
+
+    var turn3 = TurnState{};
+    turn3.focus_spent = 3.0;
+    history.push(turn3);
+
+    var turn4 = TurnState{};
+    turn4.focus_spent = 4.0;
+    history.push(turn4);
+
+    try testing.expectEqual(@as(usize, 4), history.recent_len);
+    try testing.expectEqual(@as(f32, 4.0), history.lastTurn().?.focus_spent);
+    try testing.expectEqual(@as(f32, 1.0), history.turnsAgo(3).?.focus_spent);
+
+    // Push 5th turn, should evict turn1
+    var turn5 = TurnState{};
+    turn5.focus_spent = 5.0;
+    history.push(turn5);
+
+    try testing.expectEqual(@as(usize, 4), history.recent_len);
+    try testing.expectEqual(@as(f32, 5.0), history.lastTurn().?.focus_spent);
+    try testing.expectEqual(@as(f32, 2.0), history.turnsAgo(3).?.focus_spent); // turn1 evicted
+}
+
+test "AgentEncounterState.endTurn pushes to history" {
+    var state = AgentEncounterState{};
+
+    // Add a play to current turn
+    try state.current.addPlay(.{ .primary = testId(1) });
+    state.current.focus_spent = 2.5;
+
+    // End turn
+    state.endTurn();
+
+    // Current should be cleared
+    try testing.expectEqual(@as(usize, 0), state.current.plays_len);
+    try testing.expectEqual(@as(f32, 0), state.current.focus_spent);
+
+    // History should have the previous turn
+    try testing.expectEqual(@as(usize, 1), state.history.recent_len);
+    try testing.expectEqual(@as(f32, 2.5), state.history.lastTurn().?.focus_spent);
+}
+
+test "Play.addReinforcement overflow returns error" {
+    var play = Play{ .primary = testId(0) };
+
+    // Fill to capacity
+    for (0..Play.max_reinforcements) |i| {
+        try play.addReinforcement(testId(@intCast(i + 1)));
+    }
+    try testing.expectEqual(Play.max_reinforcements, play.reinforcements_len);
+
+    // Next one should fail
+    try testing.expectError(error.Overflow, play.addReinforcement(testId(99)));
+    try testing.expectEqual(Play.max_reinforcements, play.reinforcements_len); // unchanged
+}
+
+test "TurnState.addPlay overflow returns error" {
+    var state = TurnState{};
+
+    // Fill to capacity
+    for (0..TurnState.max_plays) |i| {
+        try state.addPlay(.{ .primary = testId(@intCast(i)) });
+    }
+    try testing.expectEqual(TurnState.max_plays, state.plays_len);
+
+    // Next one should fail
+    try testing.expectError(error.Overflow, state.addPlay(.{ .primary = testId(99) }));
+    try testing.expectEqual(TurnState.max_plays, state.plays_len); // unchanged
+}
+
+test "AgentPair.canonical produces consistent key regardless of order" {
+    const id_low = entity.ID{ .index = 1, .generation = 0 };
+    const id_high = entity.ID{ .index = 5, .generation = 0 };
+
+    const pair_ab = AgentPair.canonical(id_low, id_high);
+    const pair_ba = AgentPair.canonical(id_high, id_low);
+
+    try testing.expectEqual(pair_ab.a.index, pair_ba.a.index);
+    try testing.expectEqual(pair_ab.b.index, pair_ba.b.index);
+    try testing.expectEqual(@as(u32, 1), pair_ab.a.index);
+    try testing.expectEqual(@as(u32, 5), pair_ab.b.index);
 }
