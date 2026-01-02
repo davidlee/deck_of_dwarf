@@ -69,9 +69,9 @@ pub const CombatLog = struct {
         self.alloc.free(entry.spans);
     }
 
-    pub fn maxScroll(self: *const CombatLog) usize {
-        if (self.entries.items.len <= visible_lines) return 0;
-        return self.entries.items.len - visible_lines;
+    pub fn maxScroll(self: *const CombatLog, visible_count: usize) usize {
+        if (self.entries.items.len <= visible_count) return 0;
+        return self.entries.items.len - visible_count;
     }
 
     pub fn entryCount(self: *const CombatLog) usize {
@@ -79,15 +79,15 @@ pub const CombatLog = struct {
     }
 
     /// Returns slice of visible entries (most recent at bottom)
-    pub fn visibleEntries(self: *const CombatLog, scroll_offset: usize) []const Entry {
+    pub fn visibleEntries(self: *const CombatLog, scroll_offset: usize, visible_count: usize) []const Entry {
         const len = self.entries.items.len;
         if (len == 0) return &.{};
 
-        const visible_count = @min(len, visible_lines);
+        const actual_visible = @min(len, visible_count);
         // scroll_offset=0 means viewing the most recent entries
         // higher offset means viewing older entries
         const end = len -| scroll_offset;
-        const start = end -| visible_count;
+        const start = end -| actual_visible;
 
         return self.entries.items[start..end];
     }
@@ -280,7 +280,7 @@ test "CombatLog append and visible entries" {
     try log.append(try testEntryStatic(testing.allocator, "Test message 1", colors.default));
     try log.append(try testEntryStatic(testing.allocator, "Test message 2", colors.wound));
 
-    const entries = log.visibleEntries(0);
+    const entries = log.visibleEntries(0, 40);
     try testing.expectEqual(@as(usize, 2), entries.len);
     try testing.expectEqualStrings("Test message 1", entries[0].spans[0].text);
     try testing.expectEqualStrings("Test message 2", entries[1].spans[0].text);
@@ -299,15 +299,15 @@ test "CombatLog maxScroll" {
         ));
     }
 
-    // maxScroll should be 0 when entries < visible_lines
-    try testing.expectEqual(@as(usize, 0), log.maxScroll());
+    // maxScroll should be 0 when entries < visible_count
+    try testing.expectEqual(@as(usize, 0), log.maxScroll(40));
 }
 
 test "CombatLog visibleEntries with scroll offset" {
     var log = try CombatLog.init(testing.allocator);
     defer log.deinit();
 
-    // Add more entries than visible_lines
+    // Add more entries than visible_count
     for (0..50) |i| {
         try log.append(try testEntryOwned(
             testing.allocator,
@@ -317,13 +317,13 @@ test "CombatLog visibleEntries with scroll offset" {
     }
 
     // scroll_offset=0 shows most recent entries (10-49)
-    const recent = log.visibleEntries(0);
+    const recent = log.visibleEntries(0, 40);
     try testing.expectEqual(@as(usize, 40), recent.len);
     try testing.expectEqualStrings("Message 10", recent[0].spans[0].text);
     try testing.expectEqualStrings("Message 49", recent[39].spans[0].text);
 
     // scroll_offset=10 shows older entries (0-39)
-    const older = log.visibleEntries(10);
+    const older = log.visibleEntries(10, 40);
     try testing.expectEqual(@as(usize, 40), older.len);
     try testing.expectEqualStrings("Message 0", older[0].spans[0].text);
     try testing.expectEqualStrings("Message 39", older[39].spans[0].text);

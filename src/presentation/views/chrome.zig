@@ -73,6 +73,8 @@ const MenuBar = struct {
 // Sidebar layout
 const sidebar_x: f32 = logical_w - sidebar_w;
 const sidebar_y: f32 = header_h;
+const line_height: f32 = 18;
+const log_padding: f32 = 10;
 
 /// Rectangle for the sidebar content area (for hit testing)
 const sidebar_rect = Rect{
@@ -81,6 +83,11 @@ const sidebar_rect = Rect{
     .w = sidebar_w,
     .h = logical_h - header_h - footer_h,
 };
+
+/// Number of log lines that fit in the sidebar
+fn visibleLineCount() usize {
+    return @intFromFloat((sidebar_rect.h - log_padding * 2) / line_height);
+}
 
 pub const ChromeView = struct {
     world: *const World,
@@ -96,12 +103,11 @@ pub const ChromeView = struct {
         // Handle mouse wheel scroll when over sidebar
         switch (event) {
             .mouse_wheel => |data| {
-                std.debug.print("mouse wheel: {any}\n", .{data});
                 if (isInSidebar(vs.mouse)) {
                     const current = if (vs.combat) |c| c.log_scroll else 0;
-                    const max = self.combat_log.maxScroll();
+                    const max = self.combat_log.maxScroll(visibleLineCount());
                     const new_scroll = if (data.scroll_y > 0)
-                        @min(current + 1, max)
+                        @min(current + 3, max)
                     else
                         current -| 3;
                     if (new_scroll != current) {
@@ -120,8 +126,9 @@ pub const ChromeView = struct {
 
         // Combat log as a single cached pane
         const scroll_offset = if (vs.combat) |c| c.log_scroll else 0;
+        const visible = visibleLineCount();
         try list.append(alloc, .{ .log_pane = .{
-            .entries = self.combat_log.visibleEntries(scroll_offset),
+            .entries = self.combat_log.visibleEntries(scroll_offset, visible),
             .rect = sidebar_rect,
             .scroll_offset = scroll_offset,
             .entry_count = self.combat_log.entryCount(),
